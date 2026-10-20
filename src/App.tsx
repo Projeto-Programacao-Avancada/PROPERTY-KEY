@@ -1,4 +1,13 @@
 
+import { useState } from 'react'
+
+type KeyRecord = {
+  id: number
+  code: string
+  description: string
+  status: 'available' | 'withdrawn'
+}
+
 type Stat = {
   title: string
   value: string
@@ -6,37 +15,113 @@ type Stat = {
   color: string
 }
 
-const stats: Stat[] = [
-  {
-    title: 'TOTAL DE CHAVES',
-    value: '0',
-    description: 'cadastradas',
-    color: 'default',
-  },
-  {
-    title: 'DISPONÍVEIS',
-    value: '0',
-    description: 'no momento',
-    color: 'green',
-  },
-  {
-    title: 'RETIRADAS',
-    value: '0',
-    description: 'em uso',
-    color: 'red',
-  },
-  {
-    title: 'PESSOAS REGISTRADAS',
-    value: '0',
-    description: 'pessoas cadastradas',
-    color: 'default',
-  },
-]
+function NewKeyModal({
+  onClose,
+  onSave,
+  existingCodes,
+}: {
+  onClose: () => void
+  onSave: (code: string, description: string) => void
+  existingCodes: string[]
+}) {
+  const [code, setCode] = useState('')
+  const [description, setDescription] = useState('')
+  const [error, setError] = useState('')
 
-function OccupancyCard() {
-  const total = 0
-  const retiradas = 0
-  const disponiveis = 0
+  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+
+    const normalizedCode = code.trim().toUpperCase()
+    const normalizedDescription = description.trim()
+
+    if (!normalizedCode || !normalizedDescription) {
+      setError('Preencha o código e a descrição.')
+      return
+    }
+
+    if (
+      existingCodes.some(
+        (existingCode) =>
+          existingCode.toUpperCase() === normalizedCode
+      )
+    ) {
+      setError('Já existe uma chave com esse código.')
+      return
+    }
+
+    onSave(normalizedCode, normalizedDescription)
+  }
+
+  return (
+    <div
+      className="modal-overlay"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose()
+      }}
+    >
+      <section
+        className="key-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="modal-title"
+      >
+        <div className="modal-header">
+          <h2 id="modal-title">CADASTRAR NOVA CHAVE</h2>
+          <button
+            className="modal-close"
+            type="button"
+            onClick={onClose}
+            aria-label="Fechar"
+          >
+            ×
+          </button>
+        </div>
+
+        <form className="key-form" onSubmit={handleSubmit}>
+          <label htmlFor="key-code">CÓDIGO *</label>
+          <input
+            id="key-code"
+            value={code}
+            onChange={(event) => {
+              setCode(event.target.value)
+              setError('')
+            }}
+            placeholder="Ex: A02, G01, S01"
+            maxLength={30}
+            autoFocus
+            required
+          />
+
+          <label htmlFor="key-description">DESCRIÇÃO *</label>
+          <input
+            id="key-description"
+            value={description}
+            onChange={(event) => {
+              setDescription(event.target.value)
+              setError('')
+            }}
+            placeholder="Ex: Apto 201 – Bloco A"
+            maxLength={120}
+            required
+          />
+
+          {error && <p className="form-error">{error}</p>}
+
+          <button className="submit-key" type="submit">
+            CADASTRAR CHAVE
+          </button>
+        </form>
+      </section>
+    </div>
+  )
+}
+
+function OccupancyCard({ keys }: { keys: KeyRecord[] }) {
+  const total = keys.length
+  const retiradas = keys.filter(
+    (key) => key.status === 'withdrawn'
+  ).length
+  const disponiveis = total - retiradas
   const ocupacao =
     total > 0 ? (retiradas / total) * 100 : 0
 
@@ -44,10 +129,9 @@ function OccupancyCard() {
     <section className="occupancy-card">
       <div className="section-heading">
         <div>
-          <h3>OCUPAÇÃO DE CHAVES</h3>
+          <h3>TAXA DE OCUPAÇÃO</h3>
           <p>Visão geral da utilização</p>
         </div>
-
         <span className="occupancy-percentage">
           {ocupacao.toFixed(0)}%
         </span>
@@ -63,12 +147,11 @@ function OccupancyCard() {
       <div className="occupancy-legend">
         <span>
           <i className="dot green-dot" />
-          {' '}Disponíveis: {disponiveis}
+          {' '}{disponiveis} disponíveis
         </span>
-
         <span>
           <i className="dot red-dot" />
-          {' '}Retiradas: {retiradas}
+          {' '}{retiradas} em uso
         </span>
       </div>
     </section>
@@ -80,13 +163,10 @@ function MovementChart() {
     <section className="movement-card">
       <div className="movement-heading">
         <div>
-          <h3>MOVIMENTAÇÕES DA SEMANA</h3>
+          <h3>MOVIMENTAÇÕES — ÚLTIMOS 7 DIAS</h3>
           <p>Retiradas e devoluções de chaves</p>
         </div>
-
-        <span className="chart-period">
-          ÚLTIMOS 7 DIAS
-        </span>
+        <span className="chart-period">ÚLTIMOS 7 DIAS</span>
       </div>
 
       <div className="chart-legend">
@@ -94,7 +174,6 @@ function MovementChart() {
           <i className="legend-line withdrawal-line" />
           {' '}Retiradas
         </span>
-
         <span>
           <i className="legend-line return-line" />
           {' '}Devoluções
@@ -103,126 +182,210 @@ function MovementChart() {
 
       <div className="chart-container">
         <p className="empty-state">
-          Nenhuma movimentação registrada.
-          O gráfico será atualizado quando houver
-          dados no sistema.
+          Nenhuma movimentação registrada nos últimos 7 dias.
         </p>
       </div>
     </section>
   )
 }
 
-function KeyLists() {
+function MostMovedKeys() {
   return (
-    <section className="lists-grid">
-      <article className="list-card">
-        <div className="list-heading">
-          <div>
-            <h3>CHAVES MAIS MOVIMENTADAS</h3>
-            <p>Imóveis com mais movimentações</p>
-          </div>
-
-          <span className="list-number">TOP 4</span>
+    <article className="list-card">
+      <div className="list-heading">
+        <div>
+          <h3>CHAVES MAIS MOVIMENTADAS</h3>
+          <p>Imóveis com mais movimentações</p>
         </div>
+      </div>
+      <div className="most-moved-list">
+        <p className="empty-state">
+          As chaves aparecerão aqui quando houver movimentações.
+        </p>
+      </div>
+    </article>
+  )
+}
 
-        <div className="most-moved-list">
+function WithdrawnKeys({ keys }: { keys: KeyRecord[] }) {
+  const withdrawn = keys.filter(
+    (key) => key.status === 'withdrawn'
+  )
+
+  return (
+    <article className="list-card withdrawn-card">
+      <div className="list-heading">
+        <div>
+          <h3>CHAVES RETIRADAS AGORA</h3>
+          <p>Chaves que ainda não foram devolvidas</p>
+        </div>
+        <span className="list-number">{withdrawn.length}</span>
+      </div>
+
+      <div className="activity-list">
+        {withdrawn.length === 0 ? (
           <p className="empty-state">
-            Ainda não há movimentações para exibir.
+            Nenhuma chave retirada no momento.
           </p>
-        </div>
-      </article>
+        ) : (
+          withdrawn.map((key) => (
+            <div className="activity-item" key={key.id}>
+              <div className="activity-info">
+                <strong>{key.code}</strong>
+                <span>{key.description}</span>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </article>
+  )
+}
 
-      <article className="list-card">
-        <div className="list-heading">
-          <div>
-            <h3>ATIVIDADE RECENTE</h3>
-            <p>Últimas movimentações registradas</p>
-          </div>
-
-          <span className="list-number">HOJE</span>
+function RecentActivity() {
+  return (
+    <article className="list-card">
+      <div className="list-heading">
+        <div>
+          <h3>ATIVIDADE RECENTE</h3>
+          <p>Últimas movimentações registradas</p>
         </div>
-
-        <div className="activity-list">
-          <p className="empty-state">
-            Nenhuma atividade registrada até o momento.
-          </p>
-        </div>
-      </article>
-    </section>
+      </div>
+      <div className="activity-list">
+        <p className="empty-state">
+          Nenhuma atividade registrada.
+        </p>
+      </div>
+    </article>
   )
 }
 
 function App() {
+  const [keys, setKeys] = useState<KeyRecord[]>([])
+  const [isModalOpen, setIsModalOpen] = useState(false)
+
+  function handleSaveKey(code: string, description: string) {
+    const newKey: KeyRecord = {
+      id: Date.now(),
+      code,
+      description,
+      status: 'available',
+    }
+
+    setKeys((currentKeys) => [...currentKeys, newKey])
+    setIsModalOpen(false)
+  }
+
+  const total = keys.length
+  const disponiveis = keys.filter(
+    (key) => key.status === 'available'
+  ).length
+  const retiradas = keys.filter(
+    (key) => key.status === 'withdrawn'
+  ).length
+
+  const stats: Stat[] = [
+    {
+      title: 'TOTAL DE CHAVES',
+      value: String(total),
+      description: 'cadastradas',
+      color: 'default',
+    },
+    {
+      title: 'DISPONÍVEIS',
+      value: String(disponiveis),
+      description: 'no momento',
+      color: 'green',
+    },
+    {
+      title: 'RETIRADAS',
+      value: String(retiradas),
+      description: 'em uso',
+      color: 'red',
+    },
+    {
+      title: 'PESSOAS REGISTRADAS',
+      value: '0',
+      description: 'pessoas cadastradas',
+      color: 'default',
+    },
+  ]
+
   return (
-    <div className="app">
-      <header className="topbar">
-        <div className="brand">
-          <div className="brand-icon">⚿</div>
-
-          <div>
-            <h1>CONTROLE DE CHAVES</h1>
-            <span>Gestão de Imóveis</span>
+    <>
+      <div className="app">
+        <header className="topbar">
+          <div className="brand">
+            <div className="brand-icon">⚿</div>
+            <div>
+              <h1>CONTROLE DE CHAVES</h1>
+              <span>Gestão de Imóveis</span>
+            </div>
           </div>
-        </div>
 
-        <div className="header-actions">
-          <span className="available">
-            ● 0 disponíveis
-          </span>
-
-          <span className="removed">
-            ● 0 retiradas
-          </span>
-
-          <button className="new-key" type="button">
-            + NOVA CHAVE
-          </button>
-        </div>
-      </header>
-
-      <nav className="navigation">
-        <button className="active" type="button">
-          DASHBOARD
-        </button>
-
-        <button type="button">
-          HISTÓRICO
-        </button>
-
-        <button type="button">
-          CHAVES
-        </button>
-      </nav>
-
-      <main className="dashboard">
-        <section className="stats-grid">
-          {stats.map((stat) => (
-            <article
-              className="stat-card"
-              key={stat.title}
+          <div className="header-actions">
+            <span className="available">
+              ● {disponiveis} disponíveis
+            </span>
+            <span className="removed">
+              ● {retiradas} retiradas
+            </span>
+            <button
+              className="new-key"
+              type="button"
+              onClick={() => setIsModalOpen(true)}
             >
-              <span className="stat-title">
-                {stat.title}
-              </span>
+              + NOVA CHAVE
+            </button>
+          </div>
+        </header>
 
-              <strong
-                className={`stat-value ${stat.color}`}
-              >
-                {stat.value}
-              </strong>
+        <nav className="navigation">
+          <button className="active" type="button">
+            DASHBOARD
+          </button>
+          <button type="button">HISTÓRICO</button>
+          <button type="button">CHAVES</button>
+        </nav>
 
-              <span className="stat-description">
-                {stat.description}
-              </span>
-            </article>
-          ))}
-        </section>
+        <main className="dashboard">
+          <section className="stats-grid">
+            {stats.map((stat) => (
+              <article className="stat-card" key={stat.title}>
+                <span className="stat-title">{stat.title}</span>
+                <strong className={`stat-value ${stat.color}`}>
+                  {stat.value}
+                </strong>
+                <span className="stat-description">
+                  {stat.description}
+                </span>
+              </article>
+            ))}
+          </section>
 
-        <OccupancyCard />
-        <MovementChart />
-        <KeyLists />
-      </main>
-    </div>
+          <section className="overview-grid">
+            <div className="overview-side">
+              <OccupancyCard keys={keys} />
+              <MostMovedKeys />
+            </div>
+            <MovementChart />
+          </section>
+
+          <section className="bottom-grid">
+            <WithdrawnKeys keys={keys} />
+            <RecentActivity />
+          </section>
+        </main>
+      </div>
+
+      {isModalOpen && (
+        <NewKeyModal
+          onClose={() => setIsModalOpen(false)}
+          onSave={handleSaveKey}
+          existingCodes={keys.map((key) => key.code)}
+        />
+      )}
+    </>
   )
 }
 
