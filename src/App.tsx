@@ -1,14 +1,25 @@
 
 import { useEffect, useState } from 'react'
-import type { Session } from '@supabase/supabase-js'
-import { isSupabaseConfigured, supabase } from './lib/supabase'
-import { describeAuthError, describeDbError } from './lib/supabaseErrors'
+import {
+  ApiError,
+  clearToken,
+  createKey,
+  fetchKeys,
+  fetchMe,
+  fetchPeople,
+  getToken,
+  login,
+  setUnauthorizedHandler,
+  type ApiKey,
+  type ApiUser,
+} from './lib/api'
 
-type KeyRecord = {
-  id: number
-  code: string
-  description: string
-  status: 'available' | 'withdrawn'
+type KeyRecord = ApiKey
+
+function errorMessage(error: unknown) {
+  return error instanceof ApiError || error instanceof Error
+    ? error.message
+    : 'Erro inesperado.'
 }
 
 type Stat = {
@@ -357,13 +368,6 @@ function LoginScreen({
             </button>
           </div>
 
-          {!isSupabaseConfigured && (
-            <p className="login-error" role="alert">
-              Supabase não configurado. Defina VITE_SUPABASE_URL e
-              VITE_SUPABASE_ANON_KEY no arquivo .env.
-            </p>
-          )}
-
           {error && (
             <p className="login-error" role="alert">
               {error}
@@ -373,7 +377,7 @@ function LoginScreen({
           <button
             className="login-submit"
             type="submit"
-            disabled={loading || !isSupabaseConfigured}
+            disabled={loading}
           >
             {loading ? 'ENTRANDO...' : 'ENTRAR'}{' '}
             <span aria-hidden="true">→</span>
@@ -400,76 +404,68 @@ function LoginScreen({
   )
 }
 
-function normalizePhone(value: string) {
-  const digits = value.replace(/\D/g, '')
-  // Números brasileiros sem DDI recebem +55
-  return value.trim().startsWith('+') ? `+${digits}` : `+55${digits}`
-}
-
 function App() {
-  const [session, setSession] = useState<Session | null>(null)
+  const [user, setUser] = useState<ApiUser | null>(null)
   const [authLoading, setAuthLoading] = useState(true)
   const [keys, setKeys] = useState<KeyRecord[]>([])
   const [peopleCount, setPeopleCount] = useState(0)
   const [dataError, setDataError] = useState('')
   const [isModalOpen, setIsModalOpen] = useState(false)
 
-  const isLoggedIn = session !== null
+  const isLoggedIn = user !== null
 
-  // Sessão do Supabase Auth
+  function resetSession() {
+    clearToken()
+    setUser(null)
+    setKeys([])
+    setPeopleCount(0)
+    setDataError('')
+    setIsModalOpen(false)
+  }
+
+  // Restaura a sessão a partir do token salvo e trata expiração
   useEffect(() => {
-    supabase.auth
-      .getSession()
-      .then(({ data }) => setSession(data.session))
-      .catch((error) => console.error('Erro ao ler sessão:', error))
-      .finally(() => setAuthLoading(false))
+    setUnauthorizedHandler(resetSession)
 
-    const { data: listener } = supabase.auth.onAuthStateChange(
-      (_event, newSession) => setSession(newSession)
-    )
+    if (!getToken()) {
+      setAuthLoading(false)
+    } else {
+      fetchMe()
+        .then(setUser)
+        .catch((error) => {
+          console.error('Erro ao ler sessão:', error)
+          if (!(error instanceof ApiError) || error.status === 401) {
+            clearToken()
+          }
+        })
+        .finally(() => setAuthLoading(false))
+    }
 
-    return () => listener.subscription.unsubscribe()
+    return () => setUnauthorizedHandler(null)
   }, [])
 
   // Carrega os dados quando o usuário está logado
   useEffect(() => {
-    if (!session) return
+    if (!user) return
 
     let cancelled = false
 
     async function loadData() {
       try {
-        const [keysResult, peopleResult] = await Promise.all([
-          supabase
-            .from('keys')
-            .select('id, code, description, status')
-            .order('code', { ascending: true }),
-          supabase
-            .from('people')
-            .select('id', { count: 'exact', head: true }),
+        const [keysData, peopleData] = await Promise.all([
+          fetchKeys(),
+          fetchPeople(),
         ])
 
         if (cancelled) return
 
-        const failure = keysResult.error ?? peopleResult.error
-
-        if (failure) {
-          console.error('Erro Supabase (carregar dados):', failure)
-          setDataError(describeDbError(failure))
-          return
-        }
-
         setDataError('')
-        setKeys((keysResult.data ?? []) as KeyRecord[])
-        setPeopleCount(peopleResult.count ?? 0)
+        setKeys(keysData)
+        setPeopleCount(peopleData.length)
       } catch (error) {
         if (cancelled) return
         console.error('Erro ao carregar dados:', error)
-        setDataError(
-          describeDbError({
-            message: error instanceof Error ? error.message : String(error),
-          })
-        )
+        setDataError(errorMessage(error))
       }
     }
 
@@ -478,69 +474,36 @@ function App() {
     return () => {
       cancelled = true
     }
-  }, [session])
+  }, [user])
 
   async function handleLogin(
     identifier: string,
     password: string
   ): Promise<string | null> {
-    const value = identifier.trim()
-
     try {
-      const { error } = value.includes('@')
-        ? await supabase.auth.signInWithPassword({
-            email: value,
-            password,
-          })
-        : await supabase.auth.signInWithPassword({
-            phone: normalizePhone(value),
-            password,
-          })
-
-      if (error) {
-        console.error('Erro Supabase (login):', error)
-        return describeAuthError(error)
-      }
-
+      setUser(await login(identifier.trim(), password))
       return null
     } catch (error) {
       console.error('Erro ao entrar:', error)
-      return describeAuthError({
-        message: error instanceof Error ? error.message : String(error),
-      })
+      return errorMessage(error)
     }
   }
 
-  async function handleLogout() {
-    const { error } = await supabase.auth.signOut()
-    if (error) console.error('Erro ao sair:', error)
-
-    setKeys([])
-    setPeopleCount(0)
-    setDataError('')
-    setIsModalOpen(false)
+  function handleLogout() {
+    resetSession()
   }
 
   async function handleSaveKey(
     code: string,
     description: string
   ): Promise<string | null> {
-    if (!session) return 'Sua sessão expirou. Entre novamente.'
+    if (!user) return 'Sua sessão expirou. Entre novamente.'
 
     try {
-      const { data, error } = await supabase
-        .from('keys')
-        .insert({ code, description })
-        .select('id, code, description, status')
-        .single()
-
-      if (error) {
-        console.error('Erro Supabase (salvar chave):', error)
-        return describeDbError(error)
-      }
+      const created = await createKey(code, description)
 
       setKeys((currentKeys) =>
-        [...currentKeys, data as KeyRecord].sort((a, b) =>
+        [...currentKeys, created].sort((a, b) =>
           a.code.localeCompare(b.code, 'pt-BR', { numeric: true })
         )
       )
@@ -548,9 +511,7 @@ function App() {
       return null
     } catch (error) {
       console.error('Erro ao salvar chave:', error)
-      return describeDbError({
-        message: error instanceof Error ? error.message : String(error),
-      })
+      return errorMessage(error)
     }
   }
 
