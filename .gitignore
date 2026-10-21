@@ -7,23 +7,29 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# Dependências e build
 node_modules
 dist
 dist-ssr
 *.local
 
-# Editor directories and files
+# Variáveis de ambiente (chaves do Supabase)
+.env
+.env.*
+!.env.example
+
+# Supabase CLI (arquivos locais)
+supabase/.branches
+supabase/.temp
+
+# Editor e sistema operacional
 .vscode/*
 !.vscode/extensions.json
 .idea
 .DS_Store
+Thumbs.db
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
-
-# Variáveis de ambiente
-.env
-.env.*
-!.env.example
