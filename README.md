@@ -228,17 +228,3 @@ Confira a internet e se a `VITE_SUPABASE_URL` tem o formato `https://xxxx.supaba
 **A página parece uma versão antiga**
 
 Feche todos os terminais com `npm run dev`, abra apenas um, use o endereço que ele mostrar e atualize com `Ctrl + F5`.
-
-**Erros depois de trocar de pasta ou versão**
-
-```bash
-# Mac/Linux
-rm -rf node_modules package-lock.json
-npm install
-```
-
-```powershell
-# Windows (PowerShell)
-Remove-Item -Recurse -Force node_modules, package-lock.json
-npm install
-```
