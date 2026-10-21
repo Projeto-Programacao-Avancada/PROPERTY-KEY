@@ -260,7 +260,115 @@ function RecentActivity() {
   )
 }
 
+function LoginScreen({ onLogin }: { onLogin: () => void }) {
+  const [identifier, setIdentifier] = useState('')
+  const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
+  const [error, setError] = useState('')
+
+  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+
+    if (!identifier.trim() || !password.trim()) {
+      setError('Preencha o e-mail ou telefone e a senha.')
+      return
+    }
+
+    setError('')
+    onLogin()
+  }
+
+  return (
+    <main className="login-page">
+      <section className="login-card">
+        <div className="login-brand">
+          <div className="login-brand-icon">⚿</div>
+          <div>
+            <h1>CONTROLE DE CHAVES</h1>
+            <span>Gestão de Imóveis</span>
+          </div>
+        </div>
+
+        <div className="login-heading">
+          <span className="login-eyebrow">ACESSO AO SISTEMA</span>
+          <h2>Bem-vindo de volta.</h2>
+          <p>Entre com seus dados para continuar.</p>
+        </div>
+
+        <form className="login-form" onSubmit={handleSubmit}>
+          <label htmlFor="login-identifier">
+            E-MAIL OU NÚMERO DE TELEFONE
+          </label>
+          <input
+            id="login-identifier"
+            type="text"
+            value={identifier}
+            onChange={(event) => {
+              setIdentifier(event.target.value)
+              setError('')
+            }}
+            placeholder="Digite seu e-mail ou telefone"
+            autoComplete="username"
+            required
+          />
+
+          <label htmlFor="login-password">SENHA</label>
+          <div className="login-password-field">
+            <input
+              id="login-password"
+              type={showPassword ? 'text' : 'password'}
+              value={password}
+              onChange={(event) => {
+                setPassword(event.target.value)
+                setError('')
+              }}
+              placeholder="Digite sua senha"
+              autoComplete="current-password"
+              required
+            />
+            <button
+              type="button"
+              className="toggle-password"
+              onClick={() => setShowPassword((current) => !current)}
+              aria-label={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
+            >
+              {showPassword ? 'OCULTAR' : 'MOSTRAR'}
+            </button>
+          </div>
+
+          {error && (
+            <p className="login-error" role="alert">
+              {error}
+            </p>
+          )}
+
+          <button className="login-submit" type="submit">
+            ENTRAR <span aria-hidden="true">→</span>
+          </button>
+        </form>
+
+        <button
+          className="forgot-password"
+          type="button"
+          onClick={() =>
+            setError(
+              'A recuperação de senha estará disponível após a integração com o backend.'
+            )
+          }
+        >
+          Esqueceu sua senha?
+        </button>
+
+        <div className="login-footer">
+          ACESSO RESTRITO A USUÁRIOS AUTORIZADOS
+        </div>
+      </section>
+    </main>
+  )
+}
+
 function App() {
+  const [isLoggedIn, setIsLoggedIn] = useState(false)
   const [keys, setKeys] = useState<KeyRecord[]>([])
   const [isModalOpen, setIsModalOpen] = useState(false)
 
@@ -310,6 +418,14 @@ function App() {
       color: 'default',
     },
   ]
+
+  if (!isLoggedIn) {
+    return (
+      <LoginScreen
+        onLogin={() => setIsLoggedIn(true)}
+      />
+    )
+  }
 
   return (
     <>
