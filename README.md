@@ -13,7 +13,6 @@ Tecnologias: React, TypeScript, Vite e Supabase (PostgreSQL + Auth).
 5. [Estrutura do projeto](#estrutura-do-projeto)
 6. [Comandos](#comandos)
 7. [Problemas comuns](#problemas-comuns)
-8. [Segurança](#segurança)
 
 ## Funcionalidades
 
