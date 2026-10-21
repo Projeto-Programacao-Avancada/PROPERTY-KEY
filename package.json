@@ -10,8 +10,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@supabase/ssr": "^0.12.7",
-    "@supabase/supabase-js": "^2.118.0",
+    "@supabase/supabase-js": "^2.45.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1"
   },
