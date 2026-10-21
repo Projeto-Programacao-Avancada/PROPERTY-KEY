@@ -875,3 +875,24 @@ button {
     font-size: 23px;
   }
 }
+
+.logout {
+  background: transparent;
+  border: 1px solid #3a3a3a;
+  color: #858585;
+  padding: 9px 13px;
+  font: 700 11px 'DM Mono', monospace;
+  cursor: pointer;
+}
+
+.logout:hover {
+  color: white;
+  border-color: #858585;
+}
+
+.new-key:disabled,
+.submit-key:disabled,
+.login-submit:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

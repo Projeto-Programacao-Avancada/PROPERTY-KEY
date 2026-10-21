@@ -1,4 +1,33 @@
-# React + TypeScript + Vite
+# Controle de Chaves (PROPERTY-KEY)
+
+React + TypeScript + Vite + **Supabase** (banco de dados e autenticação).
+
+## Configuração do Supabase
+
+1. Crie um projeto em https://supabase.com.
+2. No **SQL Editor**, execute o conteúdo de `supabase/schema.sql`
+   (cria as tabelas `keys`, `people`, `key_movements` e as regras de segurança RLS).
+3. Em **Authentication → Users**, crie um usuário (e-mail + senha).
+   Para login por telefone, ative o provedor *Phone* em Authentication → Providers.
+4. Copie `.env.example` para `.env` e preencha com os dados de
+   **Project Settings → API**:
+
+   ```
+   VITE_SUPABASE_URL=https://SEU-PROJETO.supabase.co
+   VITE_SUPABASE_ANON_KEY=sua-anon-public-key
+   ```
+
+5. Instale e rode:
+
+   ```
+   npm install
+   npm run dev
+   ```
+
+> Nunca use a chave `service_role` no front-end. Use apenas a `anon` key.
+
+---
+
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 

@@ -1,5 +1,7 @@
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import type { Session } from '@supabase/supabase-js'
+import { isSupabaseConfigured, supabase } from './lib/supabase'
 
 type KeyRecord = {
   id: number
@@ -21,14 +23,15 @@ function NewKeyModal({
   existingCodes,
 }: {
   onClose: () => void
-  onSave: (code: string, description: string) => void
+  onSave: (code: string, description: string) => Promise<string | null>
   existingCodes: string[]
 }) {
   const [code, setCode] = useState('')
   const [description, setDescription] = useState('')
   const [error, setError] = useState('')
+  const [saving, setSaving] = useState(false)
 
-  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
     const normalizedCode = code.trim().toUpperCase()
@@ -49,7 +52,11 @@ function NewKeyModal({
       return
     }
 
-    onSave(normalizedCode, normalizedDescription)
+    setSaving(true)
+    const saveError = await onSave(normalizedCode, normalizedDescription)
+    setSaving(false)
+
+    if (saveError) setError(saveError)
   }
 
   return (
@@ -107,8 +114,12 @@ function NewKeyModal({
 
           {error && <p className="form-error">{error}</p>}
 
-          <button className="submit-key" type="submit">
-            CADASTRAR CHAVE
+          <button
+            className="submit-key"
+            type="submit"
+            disabled={saving}
+          >
+            {saving ? 'SALVANDO...' : 'CADASTRAR CHAVE'}
           </button>
         </form>
       </section>
@@ -260,13 +271,18 @@ function RecentActivity() {
   )
 }
 
-function LoginScreen({ onLogin }: { onLogin: () => void }) {
+function LoginScreen({
+  onLogin,
+}: {
+  onLogin: (identifier: string, password: string) => Promise<string | null>
+}) {
   const [identifier, setIdentifier] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
 
-  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
     if (!identifier.trim() || !password.trim()) {
@@ -275,7 +291,11 @@ function LoginScreen({ onLogin }: { onLogin: () => void }) {
     }
 
     setError('')
-    onLogin()
+    setLoading(true)
+    const loginError = await onLogin(identifier, password)
+    setLoading(false)
+
+    if (loginError) setError(loginError)
   }
 
   return (
@@ -336,14 +356,26 @@ function LoginScreen({ onLogin }: { onLogin: () => void }) {
             </button>
           </div>
 
+          {!isSupabaseConfigured && (
+            <p className="login-error" role="alert">
+              Supabase não configurado. Defina VITE_SUPABASE_URL e
+              VITE_SUPABASE_ANON_KEY no arquivo .env.
+            </p>
+          )}
+
           {error && (
             <p className="login-error" role="alert">
               {error}
             </p>
           )}
 
-          <button className="login-submit" type="submit">
-            ENTRAR <span aria-hidden="true">→</span>
+          <button
+            className="login-submit"
+            type="submit"
+            disabled={loading || !isSupabaseConfigured}
+          >
+            {loading ? 'ENTRANDO...' : 'ENTRAR'}{' '}
+            <span aria-hidden="true">→</span>
           </button>
         </form>
 
@@ -352,7 +384,7 @@ function LoginScreen({ onLogin }: { onLogin: () => void }) {
           type="button"
           onClick={() =>
             setError(
-              'A recuperação de senha estará disponível após a integração com o backend.'
+              'Para redefinir sua senha, fale com o administrador do sistema.'
             )
           }
         >
@@ -367,21 +399,120 @@ function LoginScreen({ onLogin }: { onLogin: () => void }) {
   )
 }
 
+function normalizePhone(value: string) {
+  const digits = value.replace(/\D/g, '')
+  // Números brasileiros sem DDI recebem +55
+  return value.trim().startsWith('+') ? `+${digits}` : `+55${digits}`
+}
+
 function App() {
-  const [isLoggedIn, setIsLoggedIn] = useState(false)
+  const [session, setSession] = useState<Session | null>(null)
+  const [authLoading, setAuthLoading] = useState(true)
   const [keys, setKeys] = useState<KeyRecord[]>([])
+  const [peopleCount, setPeopleCount] = useState(0)
+  const [dataError, setDataError] = useState('')
   const [isModalOpen, setIsModalOpen] = useState(false)
 
-  function handleSaveKey(code: string, description: string) {
-    const newKey: KeyRecord = {
-      id: Date.now(),
-      code,
-      description,
-      status: 'available',
+  const isLoggedIn = session !== null
+
+  // Sessão do Supabase Auth
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      setSession(data.session)
+      setAuthLoading(false)
+    })
+
+    const { data: listener } = supabase.auth.onAuthStateChange(
+      (_event, newSession) => setSession(newSession)
+    )
+
+    return () => listener.subscription.unsubscribe()
+  }, [])
+
+  // Carrega os dados quando o usuário está logado
+  useEffect(() => {
+    if (!session) return
+
+    let cancelled = false
+
+    async function loadData() {
+      const [keysResult, peopleResult] = await Promise.all([
+        supabase
+          .from('keys')
+          .select('id, code, description, status')
+          .order('code', { ascending: true }),
+        supabase
+          .from('people')
+          .select('id', { count: 'exact', head: true }),
+      ])
+
+      if (cancelled) return
+
+      if (keysResult.error || peopleResult.error) {
+        setDataError(
+          'Não foi possível carregar os dados. Verifique se o schema SQL foi executado no Supabase.'
+        )
+        return
+      }
+
+      setDataError('')
+      setKeys((keysResult.data ?? []) as KeyRecord[])
+      setPeopleCount(peopleResult.count ?? 0)
     }
 
-    setKeys((currentKeys) => [...currentKeys, newKey])
+    loadData()
+
+    return () => {
+      cancelled = true
+    }
+  }, [session])
+
+  async function handleLogin(
+    identifier: string,
+    password: string
+  ): Promise<string | null> {
+    const value = identifier.trim()
+
+    const { error } = value.includes('@')
+      ? await supabase.auth.signInWithPassword({
+          email: value,
+          password,
+        })
+      : await supabase.auth.signInWithPassword({
+          phone: normalizePhone(value),
+          password,
+        })
+
+    if (error) return 'E-mail/telefone ou senha incorretos.'
+    return null
+  }
+
+  async function handleLogout() {
+    await supabase.auth.signOut()
+    setKeys([])
+    setPeopleCount(0)
+  }
+
+  async function handleSaveKey(
+    code: string,
+    description: string
+  ): Promise<string | null> {
+    const { data, error } = await supabase
+      .from('keys')
+      .insert({ code, description })
+      .select('id, code, description, status')
+      .single()
+
+    if (error) {
+      // 23505 = violação de chave única (código duplicado)
+      return error.code === '23505'
+        ? 'Já existe uma chave com esse código.'
+        : 'Erro ao salvar a chave. Tente novamente.'
+    }
+
+    setKeys((currentKeys) => [...currentKeys, data as KeyRecord])
     setIsModalOpen(false)
+    return null
   }
 
   const total = keys.length
@@ -413,18 +544,22 @@ function App() {
     },
     {
       title: 'PESSOAS REGISTRADAS',
-      value: '0',
+      value: String(peopleCount),
       description: 'pessoas cadastradas',
       color: 'default',
     },
   ]
 
-  if (!isLoggedIn) {
+  if (authLoading) {
     return (
-      <LoginScreen
-        onLogin={() => setIsLoggedIn(true)}
-      />
+      <main className="login-page">
+        <p className="empty-state">Carregando...</p>
+      </main>
     )
+  }
+
+  if (!isLoggedIn) {
+    return <LoginScreen onLogin={handleLogin} />
   }
 
   return (
@@ -453,6 +588,13 @@ function App() {
             >
               + NOVA CHAVE
             </button>
+            <button
+              className="logout"
+              type="button"
+              onClick={handleLogout}
+            >
+              SAIR
+            </button>
           </div>
         </header>
 
@@ -465,6 +607,12 @@ function App() {
         </nav>
 
         <main className="dashboard">
+          {dataError && (
+            <p className="form-error" role="alert">
+              {dataError}
+            </p>
+          )}
+
           <section className="stats-grid">
             {stats.map((stat) => (
               <article className="stat-card" key={stat.title}>
