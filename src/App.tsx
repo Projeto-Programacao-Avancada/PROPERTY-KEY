@@ -1,5 +1,6 @@
 
 import { useEffect, useState } from 'react'
+import HistoryPage from './features/history/HistoryPage'
 import {
   ApiError,
   clearToken,
@@ -411,6 +412,7 @@ function App() {
   const [peopleCount, setPeopleCount] = useState(0)
   const [dataError, setDataError] = useState('')
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const [activePage, setActivePage] = useState<'dashboard' | 'history'>('dashboard')
 
   const isLoggedIn = user !== null
 
@@ -421,6 +423,7 @@ function App() {
     setPeopleCount(0)
     setDataError('')
     setIsModalOpen(false)
+    setActivePage('dashboard')
   }
 
   // Restaura a sessão a partir do token salvo e trata expiração
@@ -599,13 +602,26 @@ function App() {
         </header>
 
         <nav className="navigation">
-          <button className="active" type="button">
+          <button
+            className={activePage === 'dashboard' ? 'active' : ''}
+            type="button"
+            onClick={() => setActivePage('dashboard')}
+            aria-current={activePage === 'dashboard' ? 'page' : undefined}
+          >
             DASHBOARD
           </button>
-          <button type="button">HISTÓRICO</button>
+          <button
+            className={activePage === 'history' ? 'active' : ''}
+            type="button"
+            onClick={() => setActivePage('history')}
+            aria-current={activePage === 'history' ? 'page' : undefined}
+          >
+            HISTÓRICO
+          </button>
           <button type="button">CHAVES</button>
         </nav>
 
+        {activePage === 'history' ? <HistoryPage /> : (
         <main className="dashboard">
           {dataError && (
             <p className="form-error" role="alert">
@@ -640,6 +656,7 @@ function App() {
             <RecentActivity />
           </section>
         </main>
+        )}
       </div>
 
       {isModalOpen && (
