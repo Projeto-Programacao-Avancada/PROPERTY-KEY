@@ -109,3 +109,13 @@ export const withdrawKey = (
     method: 'POST',
     body: JSON.stringify({ responsible_name: responsibleName, document, notes }),
   })
+export const returnKey = (
+  keyId: number,
+  responsibleName: string,
+  document: string,
+  notes: string
+) =>
+  request<ApiKey>(`/keys/${keyId}/return`, {
+    method: 'POST',
+    body: JSON.stringify({ responsible_name: responsibleName, document: document || null, notes }),
+  })

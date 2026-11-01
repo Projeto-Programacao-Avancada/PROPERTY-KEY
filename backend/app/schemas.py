@@ -88,7 +88,26 @@ class KeyWithdrawalIn(BaseModel):
 
 
 class KeyReturnIn(BaseModel):
+    responsible_name: str = Field(min_length=1, max_length=120)
+    document: str | None = Field(default=None, max_length=30)
     notes: str | None = Field(default=None, max_length=5000)
+
+    @field_validator("responsible_name")
+    @classmethod
+    def _responsible_name(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("Informe quem está devolvendo a chave.")
+        return value
+
+    @field_validator("document")
+    @classmethod
+    def _document(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        value = unicodedata.normalize("NFKC", value).upper()
+        value = re.sub(r"[^A-Z0-9]", "", value)
+        return value or None
 
     @field_validator("notes")
     @classmethod

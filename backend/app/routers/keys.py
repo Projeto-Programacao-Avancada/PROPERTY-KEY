@@ -132,16 +132,37 @@ def return_key(
     if key.status != "withdrawn":
         raise HTTPException(status.HTTP_409_CONFLICT, "Esta chave já está disponível.")
 
-    db.add(
-        KeyMovement(
-            key_id=key.id,
-            type="return",
-            notes=data.notes,
-            created_by=user.id,
+    person = None
+    if data.document:
+        person = db.scalar(select(Person).where(Person.document == data.document))
+        if person is not None and person.name.casefold() != data.responsible_name.casefold():
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                "Este documento já está vinculado a outro nome.",
+            )
+    if person is None:
+        person = Person(name=data.responsible_name, document=data.document)
+        db.add(person)
+
+    try:
+        db.flush()
+        db.add(
+            KeyMovement(
+                key_id=key.id,
+                person_id=person.id,
+                type="return",
+                notes=data.notes,
+                created_by=user.id,
+            )
         )
-    )
-    key.status = "available"
-    db.commit()
+        key.status = "available"
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Este documento já está cadastrado para outro responsável.",
+        )
     db.refresh(key)
     return KeyOut(
         id=key.id,

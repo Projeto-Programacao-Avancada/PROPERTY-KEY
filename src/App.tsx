@@ -12,6 +12,7 @@ import {
   fetchPeople,
   getToken,
   login,
+  returnKey,
   setUnauthorizedHandler,
   type ApiKey,
   type ApiPerson,
@@ -548,6 +549,29 @@ function App() {
     }
   }
 
+  async function handleReturnKey(
+    keyId: number,
+    responsibleName: string,
+    document: string,
+    notes: string
+  ): Promise<string | null> {
+    if (!user) return 'Sua sessão expirou. Entre novamente.'
+
+    try {
+      const updated = await returnKey(keyId, responsibleName, document, notes)
+      setKeys((currentKeys) =>
+        currentKeys.map((key) => key.id === updated.id ? updated : key)
+      )
+      fetchPeople().then(setPeople).catch((error) => {
+        console.error('Erro ao atualizar pessoas cadastradas:', error)
+      })
+      return null
+    } catch (error) {
+      console.error('Erro ao registrar devolução:', error)
+      return errorMessage(error)
+    }
+  }
+
   const total = keys.length
   const disponiveis = keys.filter(
     (key) => key.status === 'available'
@@ -672,7 +696,7 @@ function App() {
         {activePage === 'history' ? (
           <HistoryPage />
         ) : activePage === 'keys' ? (
-          <KeysPage keys={keys} onWithdraw={handleWithdrawKey} />
+          <KeysPage keys={keys} onWithdraw={handleWithdrawKey} onReturn={handleReturnKey} />
         ) : activePage === 'gallery' ? (
           <GalleryPage keys={keys} />
         ) : (

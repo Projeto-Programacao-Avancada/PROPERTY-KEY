@@ -7,11 +7,13 @@ import './keys.css'
 type KeysPageProps = {
   keys: ApiKey[]
   onWithdraw: (keyId: number, responsibleName: string, document: string, notes: string) => Promise<string | null>
+  onReturn: (keyId: number, responsibleName: string, document: string, notes: string) => Promise<string | null>
 }
 
-export default function KeysPage({ keys, onWithdraw }: KeysPageProps) {
+export default function KeysPage({ keys, onWithdraw, onReturn }: KeysPageProps) {
   const [search, setSearch] = useState('')
   const [selectedKey, setSelectedKey] = useState<ApiKey | null>(null)
+  const [action, setAction] = useState<'withdrawal' | 'return'>('withdrawal')
   const [responsibleName, setResponsibleName] = useState('')
   const [document, setDocument] = useState('')
   const [notes, setNotes] = useState('')
@@ -23,6 +25,15 @@ export default function KeysPage({ keys, onWithdraw }: KeysPageProps) {
       .toLowerCase()
       .includes(search.toLowerCase())
   )
+
+  function openAction(key: ApiKey, nextAction: 'withdrawal' | 'return') {
+    setSelectedKey(key)
+    setAction(nextAction)
+    setResponsibleName('')
+    setDocument('')
+    setNotes('')
+    setError('')
+  }
 
   function closeWithdrawal() {
     if (saving) return
@@ -36,15 +47,18 @@ export default function KeysPage({ keys, onWithdraw }: KeysPageProps) {
   async function submitWithdrawal(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!selectedKey) return
-    if (!responsibleName.trim() || !document.trim()) {
-      setError('Informe o responsável e o CPF ou documento.')
+    if (!responsibleName.trim() || (action === 'withdrawal' && !document.trim())) {
+      setError(action === 'withdrawal'
+        ? 'Informe o responsável e o CPF ou documento.'
+        : 'Informe quem está devolvendo a chave.')
       return
     }
 
     setSaving(true)
     setError('')
     try {
-      const message = await onWithdraw(
+      const submit = action === 'withdrawal' ? onWithdraw : onReturn
+      const message = await submit(
         selectedKey.id,
         responsibleName.trim(),
         document.trim(),
@@ -143,10 +157,9 @@ export default function KeysPage({ keys, onWithdraw }: KeysPageProps) {
                               ? 'withdraw-action'
                               : 'return-action'
                           }`}
-                          disabled={!isAvailable}
+                          disabled={saving}
                           onClick={() => {
-                            setSelectedKey(key)
-                            setError('')
+                            openAction(key, isAvailable ? 'withdrawal' : 'return')
                           }}
                         >
                           {isAvailable ? 'RETIRAR' : 'DEVOLVER'}
@@ -176,13 +189,15 @@ export default function KeysPage({ keys, onWithdraw }: KeysPageProps) {
           }}
         >
           <section
-            className="key-withdraw-dialog"
+            className={`key-withdraw-dialog ${action === 'return' ? 'key-return-dialog' : ''}`}
             role="dialog"
             aria-modal="true"
             aria-labelledby="key-withdraw-title"
           >
             <div className="key-withdraw-heading">
-              <h2 id="key-withdraw-title">REGISTRAR RETIRADA</h2>
+              <h2 id="key-withdraw-title">
+                {action === 'withdrawal' ? 'REGISTRAR RETIRADA' : 'REGISTRAR DEVOLUÇÃO'}
+              </h2>
               <button type="button" onClick={closeWithdrawal} aria-label="Fechar" disabled={saving}>
                 ×
               </button>
@@ -194,18 +209,40 @@ export default function KeysPage({ keys, onWithdraw }: KeysPageProps) {
                 <span>{selectedKey.description}</span>
               </div>
 
-              <label htmlFor="key-withdraw-name">RESPONSÁVEL *</label>
+              {action === 'return' && (
+                <div className="key-return-summary">
+                  <p>Retirada por <strong>{selectedKey.responsible || 'Responsável não informado'}</strong></p>
+                  <time>
+                    {selectedKey.since
+                      ? new Date(selectedKey.since).toLocaleString('pt-BR', {
+                          day: '2-digit',
+                          month: '2-digit',
+                          year: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                          hour12: false,
+                        })
+                      : 'Data não informada'}
+                  </time>
+                </div>
+              )}
+
+              <label htmlFor="key-withdraw-name">
+                {action === 'withdrawal' ? 'RESPONSÁVEL *' : 'DEVOLVIDA POR *'}
+              </label>
               <input
                 id="key-withdraw-name"
                 value={responsibleName}
                 onChange={(event) => setResponsibleName(event.target.value)}
                 maxLength={120}
-                placeholder="Nome completo"
+                placeholder={action === 'withdrawal' ? 'Nome completo' : 'Nome do responsável'}
                 autoComplete="name"
                 required
               />
 
-              <label htmlFor="key-withdraw-document">CPF / DOCUMENTO *</label>
+              <label htmlFor="key-withdraw-document">
+                CPF / DOCUMENTO{action === 'withdrawal' ? ' *' : ''}
+              </label>
               <input
                 id="key-withdraw-document"
                 value={document}
@@ -213,7 +250,7 @@ export default function KeysPage({ keys, onWithdraw }: KeysPageProps) {
                 maxLength={30}
                 placeholder="000.000.000-00"
                 autoComplete="off"
-                required
+                required={action === 'withdrawal'}
               />
 
               <label htmlFor="key-withdraw-notes">OBSERVAÇÕES</label>
@@ -229,7 +266,9 @@ export default function KeysPage({ keys, onWithdraw }: KeysPageProps) {
 
               <div className="key-withdraw-actions">
                 <button type="submit" disabled={saving}>
-                  {saving ? 'REGISTRANDO…' : 'CONFIRMAR RETIRADA'}
+                  {saving
+                    ? 'REGISTRANDO…'
+                    : action === 'withdrawal' ? 'CONFIRMAR RETIRADA' : 'CONFIRMAR DEVOLUÇÃO'}
                 </button>
               </div>
             </form>
