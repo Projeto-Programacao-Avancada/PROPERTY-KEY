@@ -1,3 +1,5 @@
+import type { HistoryMovement } from '../features/history/types'
+
 const API_URL = (import.meta.env.VITE_API_URL || '/api').replace(/\/$/, '')
 const TOKEN_KEY = 'pkm_token'
 
@@ -13,6 +15,8 @@ export type ApiKey = {
   code: string
   description: string
   status: 'available' | 'withdrawn'
+  responsible?: string | null
+  since?: string | null
 }
 
 export type ApiPerson = {
@@ -88,9 +92,20 @@ export async function login(identifier: string, password: string) {
 
 export const fetchMe = () => request<ApiUser>('/auth/me')
 export const fetchKeys = () => request<ApiKey[]>('/keys')
+export const fetchHistory = () => request<HistoryMovement[]>('/movements')
 export const fetchPeople = () => request<ApiPerson[]>('/people')
 export const createKey = (code: string, description: string) =>
   request<ApiKey>('/keys', {
     method: 'POST',
     body: JSON.stringify({ code, description }),
+  })
+export const withdrawKey = (
+  keyId: number,
+  responsibleName: string,
+  document: string,
+  notes: string
+) =>
+  request<ApiKey>(`/keys/${keyId}/withdraw`, {
+    method: 'POST',
+    body: JSON.stringify({ responsible_name: responsibleName, document, notes }),
   })

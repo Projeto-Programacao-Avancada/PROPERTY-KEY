@@ -54,6 +54,7 @@ class Person(Base):
     name: Mapped[str] = mapped_column(String(120))
     phone: Mapped[str | None] = mapped_column(String(20))
     email: Mapped[str | None] = mapped_column(String(255))
+    document: Mapped[str | None] = mapped_column(String(30), unique=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 

@@ -181,6 +181,143 @@
   color: #111;
 }
 
+.key-action:not(:disabled) {
+  cursor: pointer;
+}
+
+.key-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+/* RETIRADA */
+
+.key-withdraw-overlay {
+  position: fixed;
+  z-index: 1000;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgb(0 0 0 / 55%);
+}
+
+.key-withdraw-dialog {
+  width: min(100%, 558px);
+  border: 1px solid #dedede;
+  background: #fff;
+  box-shadow: 0 16px 48px rgb(0 0 0 / 20%);
+}
+
+.key-withdraw-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  min-height: 62px;
+  padding: 0 29px;
+  border-bottom: 1px solid #dedede;
+}
+
+.key-withdraw-heading h2 {
+  margin: 0;
+  color: #161616;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+
+.key-withdraw-heading > button {
+  border: 0;
+  background: transparent;
+  color: #aaa;
+  font-size: 21px;
+  cursor: pointer;
+}
+
+.key-withdraw-dialog form {
+  display: grid;
+  gap: 9px;
+  padding: 30px;
+}
+
+.key-withdraw-key-info {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-height: 65px;
+  box-sizing: border-box;
+  margin-bottom: 10px;
+  padding: 0 20px;
+  border: 1px solid #dedede;
+  background: #f7f7f6;
+}
+
+.key-withdraw-key-info strong {
+  color: #ed2b0b;
+  font-family: monospace;
+  font-size: 21px;
+}
+
+.key-withdraw-key-info span {
+  color: #687080;
+  font-size: 16px;
+}
+
+.key-withdraw-dialog label {
+  margin-top: 3px;
+  color: #687080;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.8px;
+}
+
+.key-withdraw-dialog input {
+  width: 100%;
+  box-sizing: border-box;
+  height: 47px;
+  padding: 0 14px;
+  border: 1px solid #dedede;
+  border-radius: 0;
+  background: #fff;
+  color: #222;
+  font-size: 16px;
+}
+
+.key-withdraw-dialog input::placeholder {
+  color: #b6bdc7;
+}
+
+.key-withdraw-error {
+  margin: 4px 0;
+  color: #a52b16;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.key-withdraw-actions {
+  display: block;
+  margin-top: 11px;
+}
+
+.key-withdraw-actions button {
+  width: 100%;
+  min-height: 50px;
+  padding: 0 18px;
+  border: 1px solid #ed2b0b;
+  border-radius: 0;
+  background: #ed2b0b;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.key-withdraw-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 /* ESTADO VAZIO */
 
 .keys-empty {

@@ -1,5 +1,6 @@
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..database import get_db
@@ -19,8 +20,20 @@ def list_people(db: Session = Depends(get_db)):
 
 @router.post("", response_model=PersonOut, status_code=status.HTTP_201_CREATED)
 def create_person(data: PersonCreate, db: Session = Depends(get_db)):
-    person = Person(name=data.name.strip(), phone=data.phone, email=data.email)
+    person = Person(
+        name=data.name.strip(),
+        phone=data.phone,
+        email=data.email,
+        document=data.document,
+    )
     db.add(person)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Já existe uma pessoa com esse documento.",
+        )
     db.refresh(person)
     return person

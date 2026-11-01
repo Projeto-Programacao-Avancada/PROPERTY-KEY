@@ -35,7 +35,9 @@ CREATE TABLE IF NOT EXISTS people (
   name       VARCHAR(120) NOT NULL,
   phone      VARCHAR(20)  NULL,
   email      VARCHAR(255) NULL,
-  created_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP
+  document   VARCHAR(30)  NULL,
+  created_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY people_document_unique (document)
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS key_movements (
