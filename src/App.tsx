@@ -1,6 +1,7 @@
 
 import { useEffect, useState } from 'react'
 import HistoryPage from './features/history/HistoryPage'
+import KeysPage from './features/keys/KeysPage'
 import {
   ApiError,
   clearToken,
@@ -412,8 +413,9 @@ function App() {
   const [peopleCount, setPeopleCount] = useState(0)
   const [dataError, setDataError] = useState('')
   const [isModalOpen, setIsModalOpen] = useState(false)
+
   const [activePage, setActivePage] = useState<
-  'dashboard' | 'history' | 'keys'
+    'dashboard' | 'history' | 'keys' | 'gallery'
   >('dashboard')
 
   const isLoggedIn = user !== null
@@ -612,6 +614,7 @@ function App() {
           >
             DASHBOARD
           </button>
+
           <button
             className={activePage === 'history' ? 'active' : ''}
             type="button"
@@ -620,51 +623,72 @@ function App() {
           >
             HISTÓRICO
           </button>
+
           <button
             className={activePage === 'keys' ? 'active' : ''}
             type="button"
             onClick={() => setActivePage('keys')}
             aria-current={activePage === 'keys' ? 'page' : undefined}
-            >
+          >
             CHAVES
+          </button>
+
+          <button
+            className={activePage === 'gallery' ? 'active' : ''}
+            type="button"
+            onClick={() => setActivePage('gallery')}
+            aria-current={activePage === 'gallery' ? 'page' : undefined}
+          >
+            GALERIA
           </button>
         </nav>
 
-        {activePage === 'history' ? <HistoryPage /> : (
-        <main className="dashboard">
-          {dataError && (
-            <p className="form-error" role="alert">
-              {dataError}
+        {activePage === 'history' ? (
+          <HistoryPage />
+        ) : activePage === 'keys' ? (
+          <KeysPage keys={keys} />
+        ) : activePage === 'gallery' ? (
+          <main className="dashboard">
+            <h2>GALERIA</h2>
+            <p>
+              Esta página será desenvolvida na próxima etapa do projeto.
             </p>
-          )}
+          </main>
+        ) : (
+          <main className="dashboard">
+            {dataError && (
+              <p className="form-error" role="alert">
+                {dataError}
+              </p>
+            )}
 
-          <section className="stats-grid">
-            {stats.map((stat) => (
-              <article className="stat-card" key={stat.title}>
-                <span className="stat-title">{stat.title}</span>
-                <strong className={`stat-value ${stat.color}`}>
-                  {stat.value}
-                </strong>
-                <span className="stat-description">
-                  {stat.description}
-                </span>
-              </article>
-            ))}
-          </section>
+            <section className="stats-grid">
+              {stats.map((stat) => (
+                <article className="stat-card" key={stat.title}>
+                  <span className="stat-title">{stat.title}</span>
+                  <strong className={`stat-value ${stat.color}`}>
+                    {stat.value}
+                  </strong>
+                  <span className="stat-description">
+                    {stat.description}
+                  </span>
+                </article>
+              ))}
+            </section>
 
-          <section className="overview-grid">
-            <div className="overview-side">
-              <OccupancyCard keys={keys} />
-              <MostMovedKeys />
-            </div>
-            <MovementChart />
-          </section>
+            <section className="overview-grid">
+              <div className="overview-side">
+                <OccupancyCard keys={keys} />
+                <MostMovedKeys />
+              </div>
+              <MovementChart />
+            </section>
 
-          <section className="bottom-grid">
-            <WithdrawnKeys keys={keys} />
-            <RecentActivity />
-          </section>
-        </main>
+            <section className="bottom-grid">
+              <WithdrawnKeys keys={keys} />
+              <RecentActivity />
+            </section>
+          </main>
         )}
       </div>
 
