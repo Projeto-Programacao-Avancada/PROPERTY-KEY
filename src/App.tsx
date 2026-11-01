@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react'
 import HistoryPage from './features/history/HistoryPage'
 import KeysPage from './features/keys/KeysPage'
+import GalleryPage from './features/gallery/GalleryPage'
 import {
   ApiError,
   clearToken,
@@ -648,12 +649,7 @@ function App() {
         ) : activePage === 'keys' ? (
           <KeysPage keys={keys} />
         ) : activePage === 'gallery' ? (
-          <main className="dashboard">
-            <h2>GALERIA</h2>
-            <p>
-              Esta página será desenvolvida na próxima etapa do projeto.
-            </p>
-          </main>
+          <GalleryPage keys={keys} />
         ) : (
           <main className="dashboard">
             {dataError && (
