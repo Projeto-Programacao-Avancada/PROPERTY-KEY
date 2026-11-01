@@ -12,9 +12,12 @@ import {
   fetchPeople,
   getToken,
   login,
+  returnKey,
   setUnauthorizedHandler,
   type ApiKey,
+  type ApiPerson,
   type ApiUser,
+  withdrawKey,
 } from './lib/api'
 
 type KeyRecord = ApiKey
@@ -411,7 +414,7 @@ function App() {
   const [user, setUser] = useState<ApiUser | null>(null)
   const [authLoading, setAuthLoading] = useState(true)
   const [keys, setKeys] = useState<KeyRecord[]>([])
-  const [peopleCount, setPeopleCount] = useState(0)
+  const [people, setPeople] = useState<ApiPerson[]>([])
   const [dataError, setDataError] = useState('')
   const [isModalOpen, setIsModalOpen] = useState(false)
 
@@ -425,7 +428,7 @@ function App() {
     clearToken()
     setUser(null)
     setKeys([])
-    setPeopleCount(0)
+    setPeople([])
     setDataError('')
     setIsModalOpen(false)
     setActivePage('dashboard')
@@ -469,7 +472,7 @@ function App() {
 
         setDataError('')
         setKeys(keysData)
-        setPeopleCount(peopleData.length)
+        setPeople(peopleData)
       } catch (error) {
         if (cancelled) return
         console.error('Erro ao carregar dados:', error)
@@ -523,6 +526,52 @@ function App() {
     }
   }
 
+  async function handleWithdrawKey(
+    keyId: number,
+    responsibleName: string,
+    document: string,
+    notes: string
+  ): Promise<string | null> {
+    if (!user) return 'Sua sessão expirou. Entre novamente.'
+
+    try {
+      const updated = await withdrawKey(keyId, responsibleName, document, notes)
+      setKeys((currentKeys) =>
+        currentKeys.map((key) => key.id === updated.id ? updated : key)
+      )
+      fetchPeople().then(setPeople).catch((error) => {
+        console.error('Erro ao atualizar pessoas cadastradas:', error)
+      })
+      return null
+    } catch (error) {
+      console.error('Erro ao registrar retirada:', error)
+      return errorMessage(error)
+    }
+  }
+
+  async function handleReturnKey(
+    keyId: number,
+    responsibleName: string,
+    document: string,
+    notes: string
+  ): Promise<string | null> {
+    if (!user) return 'Sua sessão expirou. Entre novamente.'
+
+    try {
+      const updated = await returnKey(keyId, responsibleName, document, notes)
+      setKeys((currentKeys) =>
+        currentKeys.map((key) => key.id === updated.id ? updated : key)
+      )
+      fetchPeople().then(setPeople).catch((error) => {
+        console.error('Erro ao atualizar pessoas cadastradas:', error)
+      })
+      return null
+    } catch (error) {
+      console.error('Erro ao registrar devolução:', error)
+      return errorMessage(error)
+    }
+  }
+
   const total = keys.length
   const disponiveis = keys.filter(
     (key) => key.status === 'available'
@@ -552,7 +601,7 @@ function App() {
     },
     {
       title: 'PESSOAS REGISTRADAS',
-      value: String(peopleCount),
+      value: String(people.length),
       description: 'pessoas cadastradas',
       color: 'default',
     },
@@ -647,7 +696,7 @@ function App() {
         {activePage === 'history' ? (
           <HistoryPage />
         ) : activePage === 'keys' ? (
-          <KeysPage keys={keys} />
+          <KeysPage keys={keys} onWithdraw={handleWithdrawKey} onReturn={handleReturnKey} />
         ) : activePage === 'gallery' ? (
           <GalleryPage keys={keys} />
         ) : (

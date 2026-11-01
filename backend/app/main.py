@@ -5,7 +5,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.exc import OperationalError, ProgrammingError
 
 from .config import settings
-from .routers import auth, keys, people
+from .routers import auth, keys, movements, people
 
 app = FastAPI(title="Controle de Chaves API")
 
@@ -18,6 +18,7 @@ app.add_middleware(
 
 app.include_router(auth.router, prefix="/api")
 app.include_router(keys.router, prefix="/api")
+app.include_router(movements.router, prefix="/api")
 app.include_router(people.router, prefix="/api")
 
 
