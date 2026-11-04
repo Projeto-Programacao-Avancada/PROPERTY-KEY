@@ -26,14 +26,19 @@ function HistoryIcon({ search = false }: { search?: boolean }) {
   )
 }
 
-export default function HistoryPage() {
-  const [state, setState] = useState<HistoryState>({ status: 'loading', movements: [] })
+export default function HistoryPage({ previewMode = false }: { previewMode?: boolean }) {
+  const [state, setState] = useState<HistoryState>(() => ({
+    status: previewMode ? 'ready' : 'loading',
+    movements: [],
+  }))
   const [reload, setReload] = useState(0)
-  const [preview, setPreview] = useState(false)
+  const [preview, setPreview] = useState(previewMode)
   const [filters, setFilters] = useState(initialFilters)
   const [page, setPage] = useState(1)
 
   useEffect(() => {
+    if (previewMode) return
+
     let cancelled = false
     loadHistory().then((movements) => {
       if (!cancelled) {
@@ -45,7 +50,7 @@ export default function HistoryPage() {
       if (!cancelled) setState({ status: 'error', movements: [] })
     })
     return () => { cancelled = true }
-  }, [reload])
+  }, [reload, previewMode])
 
   function updateFilter<K extends keyof HistoryFilters>(name: K, value: HistoryFilters[K]) {
     setFilters((current) => ({ ...current, [name]: value }))

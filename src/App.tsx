@@ -291,8 +291,10 @@ function RecentActivity() {
 
 function LoginScreen({
   onLogin,
+  onPreview,
 }: {
   onLogin: (identifier: string, password: string) => Promise<string | null>
+  onPreview: () => void
 }) {
   const [identifier, setIdentifier] = useState('')
   const [password, setPassword] = useState('')
@@ -402,6 +404,16 @@ function LoginScreen({
           Esqueceu sua senha?
         </button>
 
+        {import.meta.env.DEV && (
+          <button
+            className="preview-access"
+            type="button"
+            onClick={onPreview}
+          >
+            VER TODAS AS TELAS (PRÉVIA)
+          </button>
+        )}
+
         <div className="login-footer">
           ACESSO RESTRITO A USUÁRIOS AUTORIZADOS
         </div>
@@ -415,6 +427,7 @@ function App() {
   const [authLoading, setAuthLoading] = useState(true)
   const [keys, setKeys] = useState<KeyRecord[]>([])
   const [people, setPeople] = useState<ApiPerson[]>([])
+  const [previewMode, setPreviewMode] = useState(false)
   const [dataError, setDataError] = useState('')
   const [isModalOpen, setIsModalOpen] = useState(false)
 
@@ -429,6 +442,7 @@ function App() {
     setUser(null)
     setKeys([])
     setPeople([])
+    setPreviewMode(false)
     setDataError('')
     setIsModalOpen(false)
     setActivePage('dashboard')
@@ -457,7 +471,7 @@ function App() {
 
   // Carrega os dados quando o usuário está logado
   useEffect(() => {
-    if (!user) return
+    if (!user || previewMode) return
 
     let cancelled = false
 
@@ -485,7 +499,25 @@ function App() {
     return () => {
       cancelled = true
     }
-  }, [user])
+  }, [user, previewMode])
+
+  function handlePreview() {
+    setPreviewMode(true)
+    setUser({ id: 0, name: 'Prévia', email: null, phone: null })
+    setKeys([
+      { id: 1, code: 'A01', description: 'Apartamento 101 — Bloco A', status: 'available' },
+      { id: 2, code: 'A02', description: 'Apartamento 202 — Bloco A', status: 'withdrawn', responsible: 'Mariana Costa', since: '2026-11-04T09:30:00-03:00' },
+      { id: 3, code: 'B01', description: 'Apartamento 103 — Bloco B', status: 'available' },
+      { id: 4, code: 'G01', description: 'Garagem — Acesso principal', status: 'withdrawn', responsible: 'Lucas Almeida', since: '2026-11-04T11:15:00-03:00' },
+      { id: 5, code: 'S01', description: 'Salão de festas', status: 'available' },
+    ])
+    setPeople([
+      { id: 1, name: 'Mariana Costa', phone: null, email: null },
+      { id: 2, name: 'Lucas Almeida', phone: null, email: null },
+      { id: 3, name: 'Beatriz Santos', phone: null, email: null },
+    ])
+    setDataError('')
+  }
 
   async function handleLogin(
     identifier: string,
@@ -616,7 +648,7 @@ function App() {
   }
 
   if (!isLoggedIn) {
-    return <LoginScreen onLogin={handleLogin} />
+    return <LoginScreen onLogin={handleLogin} onPreview={handlePreview} />
   }
 
   return (
@@ -632,19 +664,24 @@ function App() {
           </div>
 
           <div className="header-actions">
+            {previewMode && (
+              <span className="preview-notice">PRÉVIA · DADOS FICTÍCIOS</span>
+            )}
             <span className="available">
               ● {disponiveis} disponíveis
             </span>
             <span className="removed">
               ● {retiradas} retiradas
             </span>
-            <button
-              className="new-key"
-              type="button"
-              onClick={() => setIsModalOpen(true)}
-            >
-              + NOVA CHAVE
-            </button>
+            {!previewMode && (
+              <button
+                className="new-key"
+                type="button"
+                onClick={() => setIsModalOpen(true)}
+              >
+                + NOVA CHAVE
+              </button>
+            )}
             <button
               className="logout"
               type="button"
@@ -694,9 +731,9 @@ function App() {
         </nav>
 
         {activePage === 'history' ? (
-          <HistoryPage />
+          <HistoryPage previewMode={previewMode} />
         ) : activePage === 'keys' ? (
-          <KeysPage keys={keys} onWithdraw={handleWithdrawKey} onReturn={handleReturnKey} />
+          <KeysPage keys={keys} onWithdraw={handleWithdrawKey} onReturn={handleReturnKey} readOnly={previewMode} />
         ) : activePage === 'gallery' ? (
           <GalleryPage keys={keys} />
         ) : (

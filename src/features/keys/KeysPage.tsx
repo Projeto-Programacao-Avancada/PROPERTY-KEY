@@ -8,9 +8,10 @@ type KeysPageProps = {
   keys: ApiKey[]
   onWithdraw: (keyId: number, responsibleName: string, document: string, notes: string) => Promise<string | null>
   onReturn: (keyId: number, responsibleName: string, document: string, notes: string) => Promise<string | null>
+  readOnly?: boolean
 }
 
-export default function KeysPage({ keys, onWithdraw, onReturn }: KeysPageProps) {
+export default function KeysPage({ keys, onWithdraw, onReturn, readOnly = false }: KeysPageProps) {
   const [search, setSearch] = useState('')
   const [selectedKey, setSelectedKey] = useState<ApiKey | null>(null)
   const [action, setAction] = useState<'withdrawal' | 'return'>('withdrawal')
@@ -157,7 +158,8 @@ export default function KeysPage({ keys, onWithdraw, onReturn }: KeysPageProps) 
                               ? 'withdraw-action'
                               : 'return-action'
                           }`}
-                          disabled={saving}
+                          disabled={saving || readOnly}
+                          title={readOnly ? 'Ações desativadas na prévia' : undefined}
                           onClick={() => {
                             openAction(key, isAvailable ? 'withdrawal' : 'return')
                           }}
@@ -278,4 +280,3 @@ export default function KeysPage({ keys, onWithdraw, onReturn }: KeysPageProps) 
     </main>
   )
 }
-

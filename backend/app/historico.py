@@ -13,13 +13,13 @@ from ..schemas import (
 
 router = APIRouter(
     prefix="/movements",
-    tags=["movements"],
+    tags=["historico"],
     dependencies=[Depends(get_current_user)],
 )
 
 
 @router.get("", response_model=list[HistoryMovementOut])
-def list_movements(db: Session = Depends(get_db)):
+def list_history(db: Session = Depends(get_db)):
     rows = db.execute(
         select(KeyMovement, Key.code, Key.description, Person.name, User.name)
         .join(Key, Key.id == KeyMovement.key_id)
