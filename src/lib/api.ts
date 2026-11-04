@@ -90,6 +90,22 @@ export async function login(identifier: string, password: string) {
   return data.user
 }
 
+export const registerUser = (
+  name: string,
+  email: string,
+  phone: string,
+  password: string
+) =>
+  request<ApiUser>('/auth/register', {
+    method: 'POST',
+    body: JSON.stringify({
+      name,
+      email: email.trim() || null,
+      phone: phone.trim() || null,
+      password,
+    }),
+  })
+
 export const fetchMe = () => request<ApiUser>('/auth/me')
 export const fetchKeys = () => request<ApiKey[]>('/keys')
 export const fetchHistory = () => request<HistoryMovement[]>('/movements')

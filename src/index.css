@@ -674,6 +674,7 @@ button {
 .login-card {
   width: 100%;
   max-width: 440px;
+  margin: auto;
   padding: 36px;
   background: #fff;
   border: 1px solid #dedede;
@@ -838,6 +839,19 @@ button {
   line-height: 1.5;
 }
 
+.login-success {
+  margin: 4px 0;
+  color: #18764b;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.login-hint {
+  margin: -4px 0 0;
+  color: #777;
+  font-size: 11px;
+}
+
 .forgot-password {
   display: block;
   margin: 18px 0 0 auto;
@@ -850,6 +864,29 @@ button {
 
 .forgot-password:hover {
   color: #eb2d00;
+}
+
+.register-access {
+  display: block;
+  width: 100%;
+  margin-top: 20px;
+  padding: 12px 0 0;
+  border: 0;
+  border-top: 1px solid #e8e8e8;
+  background: transparent;
+  color: #666;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  text-align: center;
+}
+
+.register-access span {
+  color: #eb2d00;
+}
+
+.register-access:hover span {
+  text-decoration: underline;
 }
 
 .preview-access {

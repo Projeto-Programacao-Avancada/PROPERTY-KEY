@@ -12,6 +12,7 @@ import {
   fetchPeople,
   getToken,
   login,
+  registerUser,
   returnKey,
   setUnauthorizedHandler,
   type ApiKey,
@@ -291,19 +292,55 @@ function RecentActivity() {
 
 function LoginScreen({
   onLogin,
+  onRegister,
   onPreview,
 }: {
   onLogin: (identifier: string, password: string) => Promise<string | null>
+  onRegister: (name: string, email: string, phone: string, password: string) => Promise<string | null>
   onPreview: () => void
 }) {
+  const [mode, setMode] = useState<'login' | 'register'>('login')
   const [identifier, setIdentifier] = useState('')
+  const [name, setName] = useState('')
+  const [email, setEmail] = useState('')
+  const [phone, setPhone] = useState('')
   const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
   const [loading, setLoading] = useState(false)
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
+
+    if (mode === 'register') {
+      if (!email.trim() && !phone.trim()) {
+        setError('Informe um e-mail ou telefone para acessar sua conta.')
+        return
+      }
+      if (password !== confirmPassword) {
+        setError('As senhas não coincidem.')
+        return
+      }
+
+      setError('')
+      setSuccess('')
+      setLoading(true)
+      const registrationError = await onRegister(name, email, phone, password)
+      setLoading(false)
+
+      if (registrationError) {
+        setError(registrationError)
+      } else {
+        setMode('login')
+        setIdentifier(email.trim() || phone.trim())
+        setPassword('')
+        setConfirmPassword('')
+        setSuccess('Conta criada. Entre com seu e-mail ou telefone e sua senha.')
+      }
+      return
+    }
 
     if (!identifier.trim() || !password.trim()) {
       setError('Preencha o e-mail ou telefone e a senha.')
@@ -330,29 +367,88 @@ function LoginScreen({
         </div>
 
         <div className="login-heading">
-          <span className="login-eyebrow">ACESSO AO SISTEMA</span>
-          <h2>Bem-vindo de volta.</h2>
-          <p>Entre com seus dados para continuar.</p>
+          <span className="login-eyebrow">
+            {mode === 'login' ? 'ACESSO AO SISTEMA' : 'NOVO CADASTRO'}
+          </span>
+          <h2>{mode === 'login' ? 'Bem-vindo de volta.' : 'Crie sua conta.'}</h2>
+          <p>
+            {mode === 'login'
+              ? 'Entre com seus dados para continuar.'
+              : 'Informe seus dados para acessar o sistema.'}
+          </p>
         </div>
 
         <form className="login-form" onSubmit={handleSubmit}>
-          <label htmlFor="login-identifier">
-            E-MAIL OU NÚMERO DE TELEFONE
-          </label>
-          <input
-            id="login-identifier"
-            type="text"
-            value={identifier}
-            onChange={(event) => {
-              setIdentifier(event.target.value)
-              setError('')
-            }}
-            placeholder="Digite seu e-mail ou telefone"
-            autoComplete="username"
-            required
-          />
+          {mode === 'register' ? (
+            <>
+              <label htmlFor="register-name">NOME COMPLETO</label>
+              <input
+                id="register-name"
+                type="text"
+                value={name}
+                onChange={(event) => {
+                  setName(event.target.value)
+                  setError('')
+                }}
+                placeholder="Digite seu nome"
+                autoComplete="name"
+                maxLength={120}
+                required
+              />
 
-          <label htmlFor="login-password">SENHA</label>
+              <label htmlFor="register-email">E-MAIL (OPCIONAL)</label>
+              <input
+                id="register-email"
+                type="email"
+                value={email}
+                onChange={(event) => {
+                  setEmail(event.target.value)
+                  setError('')
+                }}
+                placeholder="voce@exemplo.com"
+                autoComplete="email"
+                maxLength={255}
+              />
+
+              <label htmlFor="register-phone">TELEFONE (OPCIONAL)</label>
+              <input
+                id="register-phone"
+                type="tel"
+                value={phone}
+                onChange={(event) => {
+                  setPhone(event.target.value)
+                  setError('')
+                }}
+                placeholder="(71) 99999-9999"
+                autoComplete="tel"
+                maxLength={25}
+              />
+              <p className="login-hint">Informe pelo menos um: e-mail ou telefone.</p>
+            </>
+          ) : (
+            <>
+              <label htmlFor="login-identifier">
+                E-MAIL OU NÚMERO DE TELEFONE
+              </label>
+              <input
+                id="login-identifier"
+                type="text"
+                value={identifier}
+                onChange={(event) => {
+                  setIdentifier(event.target.value)
+                  setError('')
+                  setSuccess('')
+                }}
+                placeholder="Digite seu e-mail ou telefone"
+                autoComplete="username"
+                required
+              />
+            </>
+          )}
+
+          <label htmlFor="login-password">
+            {mode === 'register' ? 'SENHA (MÍNIMO 8 CARACTERES)' : 'SENHA'}
+          </label>
           <div className="login-password-field">
             <input
               id="login-password"
@@ -361,9 +457,12 @@ function LoginScreen({
               onChange={(event) => {
                 setPassword(event.target.value)
                 setError('')
+                setSuccess('')
               }}
-              placeholder="Digite sua senha"
-              autoComplete="current-password"
+              placeholder={mode === 'register' ? 'Crie uma senha' : 'Digite sua senha'}
+              autoComplete={mode === 'register' ? 'new-password' : 'current-password'}
+              minLength={mode === 'register' ? 8 : undefined}
+              maxLength={mode === 'register' ? 72 : undefined}
               required
             />
             <button
@@ -376,9 +475,34 @@ function LoginScreen({
             </button>
           </div>
 
+          {mode === 'register' && (
+            <>
+              <label htmlFor="register-confirm-password">CONFIRMAR SENHA</label>
+              <input
+                id="register-confirm-password"
+                type={showPassword ? 'text' : 'password'}
+                value={confirmPassword}
+                onChange={(event) => {
+                  setConfirmPassword(event.target.value)
+                  setError('')
+                }}
+                placeholder="Digite novamente sua senha"
+                autoComplete="new-password"
+                minLength={8}
+                maxLength={72}
+                required
+              />
+            </>
+          )}
+
           {error && (
             <p className="login-error" role="alert">
               {error}
+            </p>
+          )}
+          {success && (
+            <p className="login-success" role="status">
+              {success}
             </p>
           )}
 
@@ -387,22 +511,50 @@ function LoginScreen({
             type="submit"
             disabled={loading}
           >
-            {loading ? 'ENTRANDO...' : 'ENTRAR'}{' '}
+            {loading
+              ? mode === 'login' ? 'ENTRANDO...' : 'CRIANDO CONTA...'
+              : mode === 'login' ? 'ENTRAR' : 'CRIAR CONTA'}{' '}
             <span aria-hidden="true">→</span>
           </button>
         </form>
 
-        <button
-          className="forgot-password"
-          type="button"
-          onClick={() =>
-            setError(
-              'Para redefinir sua senha, fale com o administrador do sistema.'
-            )
-          }
-        >
-          Esqueceu sua senha?
-        </button>
+        {mode === 'login' ? (
+          <>
+            <button
+              className="forgot-password"
+              type="button"
+              onClick={() =>
+                setError(
+                  'Para redefinir sua senha, fale com o administrador do sistema.'
+                )
+              }
+            >
+              Esqueceu sua senha?
+            </button>
+            <button
+              className="register-access"
+              type="button"
+              onClick={() => {
+                setMode('register')
+                setError('')
+                setSuccess('')
+              }}
+            >
+              NÃO TEM UMA CONTA? <span>CADASTRE-SE</span>
+            </button>
+          </>
+        ) : (
+          <button
+            className="register-access"
+            type="button"
+            onClick={() => {
+              setMode('login')
+              setError('')
+            }}
+          >
+            JÁ TEM UMA CONTA? <span>ENTRAR</span>
+          </button>
+        )}
 
         {import.meta.env.DEV && (
           <button
@@ -532,6 +684,21 @@ function App() {
     }
   }
 
+  async function handleRegister(
+    name: string,
+    email: string,
+    phone: string,
+    password: string
+  ): Promise<string | null> {
+    try {
+      await registerUser(name.trim(), email, phone, password)
+      return null
+    } catch (error) {
+      console.error('Erro ao criar usuário:', error)
+      return errorMessage(error)
+    }
+  }
+
   function handleLogout() {
     resetSession()
   }
@@ -648,7 +815,13 @@ function App() {
   }
 
   if (!isLoggedIn) {
-    return <LoginScreen onLogin={handleLogin} onPreview={handlePreview} />
+    return (
+      <LoginScreen
+        onLogin={handleLogin}
+        onRegister={handleRegister}
+        onPreview={handlePreview}
+      />
+    )
   }
 
   return (

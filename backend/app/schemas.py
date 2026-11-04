@@ -2,12 +2,56 @@ from datetime import datetime
 import re
 import unicodedata
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
 
 class LoginIn(BaseModel):
     identifier: str = Field(min_length=1, max_length=255)
     password: str = Field(min_length=1, max_length=255)
+
+
+class UserCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    email: EmailStr | None = None
+    phone: str | None = Field(default=None, max_length=25)
+    password: str = Field(min_length=8, max_length=255)
+
+    @field_validator("name")
+    @classmethod
+    def _name(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("Informe seu nome.")
+        return value
+
+    @field_validator("email")
+    @classmethod
+    def _email(cls, value: EmailStr | None) -> str | None:
+        return str(value).strip().lower() if value is not None else None
+
+    @field_validator("phone")
+    @classmethod
+    def _phone(cls, value: str | None) -> str | None:
+        if value is None or not value.strip():
+            return None
+        value = value.strip()
+        digits = re.sub(r"\D", "", value)
+        if not 10 <= len(digits) <= 15:
+            raise ValueError("Informe um telefone válido com DDD.")
+        return value
+
+    @field_validator("password")
+    @classmethod
+    def _password(cls, value: str) -> str:
+        if len(value.encode("utf-8")) > 72:
+            raise ValueError("A senha deve ter no máximo 72 bytes.")
+        return value
+
+    @model_validator(mode="after")
+    def _require_contact(self):
+        if not self.email and not self.phone:
+            raise ValueError("Informe um e-mail ou telefone.")
+        return self
 
 
 class UserOut(BaseModel):
