@@ -1,5 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import func, select
+from fastapi import APIRouter, Depends, HTTPException, Response, status
+from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -65,6 +65,82 @@ def create_key(
         raise HTTPException(status.HTTP_409_CONFLICT, DUPLICATE_MSG)
     db.refresh(key)
     return key
+
+
+@router.put("/{key_id}", response_model=KeyOut)
+def update_key(
+    key_id: int,
+    data: KeyCreate,
+    db: Session = Depends(get_db),
+):
+    key = db.scalar(select(Key).where(Key.id == key_id).with_for_update())
+    if key is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Chave não encontrada.")
+
+    duplicate_id = db.scalar(
+        select(Key.id).where(Key.code == data.code, Key.id != key_id)
+    )
+    if duplicate_id is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, DUPLICATE_MSG)
+
+    key.code = data.code
+    key.description = data.description
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status.HTTP_409_CONFLICT, DUPLICATE_MSG)
+
+    movement = db.scalar(
+        select(KeyMovement)
+        .where(KeyMovement.key_id == key.id)
+        .order_by(KeyMovement.id.desc())
+    )
+    responsible = None
+    since = None
+    if key.status == "withdrawn" and movement is not None:
+        responsible = db.scalar(
+            select(Person.name).where(Person.id == movement.person_id)
+        )
+        since = movement.created_at
+
+    return KeyOut(
+        id=key.id,
+        code=key.code,
+        description=key.description,
+        status=key.status,
+        responsible=responsible,
+        since=since,
+    )
+
+
+@router.delete("/{key_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_key(
+    key_id: int,
+    db: Session = Depends(get_db),
+):
+    key = db.scalar(select(Key).where(Key.id == key_id).with_for_update())
+    if key is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Chave não encontrada.")
+    if key.status != "available":
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Devolva a chave antes de excluí-la.",
+        )
+
+    try:
+        # O schema MySQL usa ON DELETE CASCADE; remover explicitamente também
+        # mantém o mesmo comportamento no SQLite local, que não ativa FKs por padrão.
+        db.execute(delete(KeyMovement).where(KeyMovement.key_id == key.id))
+        db.delete(key)
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Não foi possível excluir esta chave por causa dos dados associados.",
+        )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post("/{key_id}/withdraw", response_model=KeyOut)

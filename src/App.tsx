@@ -13,6 +13,8 @@ import {
   getToken,
   login,
   registerUser,
+  updateKey,
+  deleteKey,
   returnKey,
   setUnauthorizedHandler,
   type ApiKey,
@@ -725,6 +727,40 @@ function App() {
     }
   }
 
+  async function handleUpdateKey(
+    keyId: number,
+    code: string,
+    description: string
+  ): Promise<string | null> {
+    if (!user) return 'Sua sessão expirou. Entre novamente.'
+
+    try {
+      const updated = await updateKey(keyId, code, description)
+      setKeys((currentKeys) =>
+        currentKeys
+          .map((key) => key.id === updated.id ? updated : key)
+          .sort((a, b) => a.code.localeCompare(b.code, 'pt-BR', { numeric: true }))
+      )
+      return null
+    } catch (error) {
+      console.error('Erro ao atualizar chave:', error)
+      return errorMessage(error)
+    }
+  }
+
+  async function handleDeleteKey(keyId: number): Promise<string | null> {
+    if (!user) return 'Sua sessão expirou. Entre novamente.'
+
+    try {
+      await deleteKey(keyId)
+      setKeys((currentKeys) => currentKeys.filter((key) => key.id !== keyId))
+      return null
+    } catch (error) {
+      console.error('Erro ao excluir chave:', error)
+      return errorMessage(error)
+    }
+  }
+
   async function handleWithdrawKey(
     keyId: number,
     responsibleName: string,
@@ -906,7 +942,14 @@ function App() {
         {activePage === 'history' ? (
           <HistoryPage previewMode={previewMode} />
         ) : activePage === 'keys' ? (
-          <KeysPage keys={keys} onWithdraw={handleWithdrawKey} onReturn={handleReturnKey} readOnly={previewMode} />
+          <KeysPage
+            keys={keys}
+            onWithdraw={handleWithdrawKey}
+            onReturn={handleReturnKey}
+            onUpdate={handleUpdateKey}
+            onDelete={handleDeleteKey}
+            readOnly={previewMode}
+          />
         ) : activePage === 'gallery' ? (
           <GalleryPage keys={keys} />
         ) : (

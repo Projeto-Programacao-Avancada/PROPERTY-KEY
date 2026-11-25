@@ -115,6 +115,13 @@ export const createKey = (code: string, description: string) =>
     method: 'POST',
     body: JSON.stringify({ code, description }),
   })
+export const updateKey = (keyId: number, code: string, description: string) =>
+  request<ApiKey>(`/keys/${keyId}`, {
+    method: 'PUT',
+    body: JSON.stringify({ code, description }),
+  })
+export const deleteKey = (keyId: number) =>
+  request<void>(`/keys/${keyId}`, { method: 'DELETE' })
 export const withdrawKey = (
   keyId: number,
   responsibleName: string,

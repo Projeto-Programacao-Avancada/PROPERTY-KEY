@@ -117,12 +117,9 @@ class KeyWithdrawalIn(BaseModel):
     @field_validator("document")
     @classmethod
     def _document(cls, value: str) -> str:
-        value = unicodedata.normalize("NFKC", value).upper()
-        value = re.sub(r"[^A-Z0-9]", "", value)
-        if not value:
-            raise ValueError("Informe o CPF ou documento.")
-        if len(value) > 30:
-            raise ValueError("O documento deve ter no máximo 30 caracteres.")
+        value = re.sub(r"\D", "", value)
+        if len(value) != 11:
+            raise ValueError("O CPF deve conter exatamente 11 números.")
         return value
 
     @field_validator("notes")
