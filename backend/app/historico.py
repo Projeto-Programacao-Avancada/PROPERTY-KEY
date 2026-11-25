@@ -2,10 +2,10 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..database import get_db
-from ..deps import get_current_user
-from ..models import Key, KeyMovement, Person, User
-from ..schemas import (
+from .database import get_db
+from .deps import get_current_user
+from .models import Key, KeyMovement, Person, User
+from .schemas import (
     HistoryMovementOut,
     MovementKeyOut,
     MovementRelatedOut,
