@@ -280,3 +280,37 @@ Com o backend e o frontend em execução:
 
 O frontend e o backend precisam estar executando ao mesmo tempo. Se
 fechar um dos terminais, o serviço correspondente será interrompido.
+
+## Módulo de IA — previsão demonstrativa de atraso
+
+O módulo acadêmico utiliza Random Forest e uma base sintética identificada como tal.
+Para preparar o backend no Windows, abra o PowerShell dentro de `backend`:
+
+```powershell
+python -m venv .venv
+.venv\\Scripts\\activate
+pip install -r requirements.txt
+Copy-Item .env.example .env
+```
+
+Edite `backend/.env` e configure `DATABASE_URL` e `SECRET_KEY` com os valores
+corretos do seu ambiente. Não compartilhe nem versione esse arquivo.
+
+Ainda dentro de `backend`, gere a base e treine o modelo:
+
+```powershell
+python ai_model/generate_dataset.py
+python ai_model/train_model.py
+python -m uvicorn app.main:app --reload
+```
+
+Em outro terminal, na raiz do projeto:
+
+```powershell
+npm install
+npm run dev
+```
+
+Após entrar no sistema, acesse **IA / PREVISÕES**. Consulte `backend/ai_model/README.md`
+para detalhes sobre dados, algoritmo, métricas e limitações. A IA é demonstrativa:
+não foi validada com histórico real de retiradas e devoluções.

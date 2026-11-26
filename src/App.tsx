@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import HistoryPage from './features/history/HistoryPage'
 import KeysPage from './features/keys/KeysPage'
 import GalleryPage from './features/gallery/GalleryPage'
+import AiPage from './features/ai/AiPage'
 import {
   ApiError,
   clearToken,
@@ -586,7 +587,7 @@ function App() {
   const [isModalOpen, setIsModalOpen] = useState(false)
 
   const [activePage, setActivePage] = useState<
-    'dashboard' | 'history' | 'keys' | 'gallery'
+    'dashboard' | 'history' | 'keys' | 'gallery' | 'ai'
   >('dashboard')
 
   const isLoggedIn = user !== null
@@ -937,9 +938,20 @@ function App() {
           >
             GALERIA
           </button>
+
+          <button
+            className={activePage === 'ai' ? 'active' : ''}
+            type="button"
+            onClick={() => setActivePage('ai')}
+            aria-current={activePage === 'ai' ? 'page' : undefined}
+          >
+            IA / PREVISÕES
+          </button>
         </nav>
 
-        {activePage === 'history' ? (
+        {activePage === 'ai' ? (
+          <AiPage keys={keys} previewMode={previewMode} />
+        ) : activePage === 'history' ? (
           <HistoryPage previewMode={previewMode} />
         ) : activePage === 'keys' ? (
           <KeysPage

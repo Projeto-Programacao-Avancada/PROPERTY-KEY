@@ -6,7 +6,7 @@ from sqlalchemy.exc import OperationalError, ProgrammingError
 
 from .config import settings
 from . import historico
-from .routers import auth, keys, people
+from .routers import auth, keys, people, ai
 
 app = FastAPI(title="Controle de Chaves API")
 
@@ -21,6 +21,7 @@ app.include_router(auth.router, prefix="/api")
 app.include_router(keys.router, prefix="/api")
 app.include_router(historico.router, prefix="/api")
 app.include_router(people.router, prefix="/api")
+app.include_router(ai.router, prefix="/api")
 
 
 @app.get("/api/health")

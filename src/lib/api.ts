@@ -142,3 +142,23 @@ export const returnKey = (
     method: 'POST',
     body: JSON.stringify({ responsible_name: responsibleName, document: document || null, notes }),
   })
+
+
+export type AiPrediction = {
+  risk: 'high' | 'low'
+  probability: number
+  probability_percent: number
+  threshold_minutes: number
+  threshold_hours: number
+  model: string
+  disclaimer: string
+}
+
+export const predictWithdrawalRisk = (keyId: number, personId = 1) =>
+  request<AiPrediction>('/ai/predict', {
+    method: 'POST',
+    body: JSON.stringify({ key_id: keyId, person_id: personId }),
+  })
+
+export const fetchAiStatus = () =>
+  request<{ available: boolean; model: string; threshold_minutes: number }>('/ai/status')

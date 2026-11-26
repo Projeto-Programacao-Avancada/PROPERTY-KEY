@@ -66,3 +66,8 @@ desktop.ini
 # =========================
 *.log
 logs/
+
+# Artefatos gerados pelo treinamento de IA
+backend/ai_model/data/*.csv
+backend/ai_model/artifacts/*.joblib
+backend/ai_model/artifacts/metrics.json
