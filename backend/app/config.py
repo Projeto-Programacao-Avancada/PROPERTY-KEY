@@ -1,5 +1,9 @@
+from pathlib import Path
+
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+DEFAULT_UPLOAD_DIR = Path(__file__).resolve().parents[1] / "uploads"
 
 
 class Settings(BaseSettings):
@@ -9,6 +13,7 @@ class Settings(BaseSettings):
     secret_key: str
     access_token_expire_minutes: int = 720
     cors_origins: str = "http://localhost:5173"
+    upload_dir: str = str(DEFAULT_UPLOAD_DIR)
 
     @field_validator("secret_key")
     @classmethod
@@ -20,6 +25,10 @@ class Settings(BaseSettings):
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+
+    @property
+    def gallery_upload_path(self) -> Path:
+        return Path(self.upload_dir).resolve() / "gallery"
 
 
 settings = Settings()  # type: ignore[call-arg]

@@ -1,8 +1,9 @@
-import type { HistoryMovement, MovementType } from './types'
+import { borrowerOf, type HistoryMovement, type MovementType } from './types.ts'
 
 export type HistoryFilters = {
   search: string
   type: MovementType | ''
+  personId: number | null
   startDate: string
   endDate: string
   order: 'newest' | 'oldest'
@@ -23,10 +24,22 @@ export function filterMovements(movements: HistoryMovement[], filters: HistoryFi
 
     return (!search || normalize(text).includes(search)) &&
       (!filters.type || movement.type === filters.type) &&
+      (filters.personId === null || borrowerOf(movement)?.id === filters.personId) &&
       (!filters.startDate || localDate >= filters.startDate) &&
       (!filters.endDate || localDate <= filters.endDate)
   }).sort((a, b) => {
     const difference = new Date(b.created_at).getTime() - new Date(a.created_at).getTime() || b.id - a.id
     return filters.order === 'newest' ? difference : -difference
   })
+}
+
+// Pessoas que aparecem no histórico, em ordem alfabética, para o filtro por pessoa.
+export function listPeople(movements: HistoryMovement[]) {
+  const people = new Map<number, string>()
+  for (const movement of movements) {
+    const borrower = borrowerOf(movement)
+    if (borrower) people.set(borrower.id, borrower.name)
+  }
+  return [...people].map(([id, name]) => ({ id, name }))
+    .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'))
 }

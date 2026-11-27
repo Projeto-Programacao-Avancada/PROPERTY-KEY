@@ -1,21 +1,22 @@
 import { useEffect, useState } from 'react'
 import { loadHistory } from './historySource'
 import { exampleMovements } from './exampleMovements'
-import { filterMovements, type HistoryFilters } from './filterMovements'
-import type { HistoryMovement } from './types'
+import { filterMovements, listPeople, type HistoryFilters } from './filterMovements'
+import { LoanDuration, LoanStatusBadge } from './LoanInfo'
+import { formatDate, formatTime, summarizeMovements, type HistoryMovement, type PersonRef } from './types'
+import { useNow } from '../../lib/useNow'
 import './history.css'
 
 type HistoryState = {
-  status: 'loading' | 'unavailable' | 'error' | 'ready'
+  status: 'loading' | 'error' | 'ready'
   movements: HistoryMovement[]
 }
 
 const initialFilters: HistoryFilters = {
-  search: '', type: '', startDate: '', endDate: '', order: 'newest',
+  search: '', type: '', personId: null, startDate: '', endDate: '', order: 'newest',
 }
 const PAGE_SIZE = 8
-const dateFormat = new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
-const timeFormat = new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit' })
+const COLUMNS = 6
 
 function HistoryIcon({ search = false }: { search?: boolean }) {
   return (
@@ -26,7 +27,9 @@ function HistoryIcon({ search = false }: { search?: boolean }) {
   )
 }
 
-export default function HistoryPage({ previewMode = false }: { previewMode?: boolean }) {
+type HistoryPageProps = { previewMode?: boolean; onOpenPerson?: (person: PersonRef) => void }
+
+export default function HistoryPage({ previewMode = false, onOpenPerson }: HistoryPageProps) {
   const [state, setState] = useState<HistoryState>(() => ({
     status: previewMode ? 'ready' : 'loading',
     movements: [],
@@ -35,17 +38,14 @@ export default function HistoryPage({ previewMode = false }: { previewMode?: boo
   const [preview, setPreview] = useState(previewMode)
   const [filters, setFilters] = useState(initialFilters)
   const [page, setPage] = useState(1)
+  const now = useNow()
 
   useEffect(() => {
     if (previewMode) return
 
     let cancelled = false
     loadHistory().then((movements) => {
-      if (!cancelled) {
-        setState(movements === null
-          ? { status: 'unavailable', movements: [] }
-          : { status: 'ready', movements })
-      }
+      if (!cancelled) setState({ status: 'ready', movements })
     }).catch(() => {
       if (!cancelled) setState({ status: 'error', movements: [] })
     })
@@ -79,14 +79,20 @@ export default function HistoryPage({ previewMode = false }: { previewMode?: boo
   const pages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
   const currentPage = Math.min(page, pages)
   const visible = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)
-  const hasFilters = Boolean(filters.search || filters.type || filters.startDate || filters.endDate)
+  const hasFilters = Boolean(filters.search || filters.type || filters.personId !== null || filters.startDate || filters.endDate)
   const withdrawals = filtered.filter((movement) => movement.type === 'withdrawal').length
   const people = new Set(filtered.flatMap((movement) => movement.person_id === null ? [] : [movement.person_id])).size
+  const summary = summarizeMovements(filtered)
+  const delayDescription = summary.devolucoes_com_prazo === 0
+    ? 'sem previsão de devolução'
+    : `${summary.devolucoes_com_atraso} de ${summary.devolucoes_com_prazo} devoluções com atraso`
   const stats = [
-    { title: 'MOVIMENTAÇÕES', value: filtered.length, description: 'registros no período', color: '' },
-    { title: 'RETIRADAS', value: withdrawals, description: 'saídas de chaves', color: 'history-red' },
-    { title: 'DEVOLUÇÕES', value: filtered.length - withdrawals, description: 'chaves devolvidas', color: 'history-green' },
-    { title: 'PESSOAS', value: people, description: 'com movimentações', color: '' },
+    { title: 'MOVIMENTAÇÕES', value: String(filtered.length).padStart(2, '0'), description: 'registros no período', color: '' },
+    { title: 'RETIRADAS', value: String(withdrawals).padStart(2, '0'), description: 'saídas de chaves', color: 'history-red' },
+    { title: 'DEVOLUÇÕES', value: String(filtered.length - withdrawals).padStart(2, '0'), description: 'chaves devolvidas', color: 'history-green' },
+    { title: 'PESSOAS', value: String(people).padStart(2, '0'), description: 'com movimentações', color: '' },
+    { title: 'DURAÇÃO MÉDIA REAL', value: summary.duracao_media_texto ?? '—', description: `${summary.devolucoes_concluidas} ${summary.devolucoes_concluidas === 1 ? 'devolução concluída' : 'devoluções concluídas'}`, color: 'history-stat-text' },
+    { title: 'MÉDIA DE DEMORA', value: summary.atraso_medio_texto ?? '—', description: delayDescription, color: 'history-stat-text' },
   ]
 
   return (
@@ -113,7 +119,7 @@ export default function HistoryPage({ previewMode = false }: { previewMode?: boo
         {stats.map((stat) => (
           <article className="history-stat" key={stat.title}>
             <span className="history-stat-title">{stat.title}</span>
-            <strong className={`history-stat-value ${stat.color}`}>{available ? String(stat.value).padStart(2, '0') : '—'}</strong>
+            <strong className={`history-stat-value ${stat.color}`}>{available ? stat.value : '—'}</strong>
             <span className="history-stat-description">{stat.description}</span>
           </article>
         ))}
@@ -138,6 +144,13 @@ export default function HistoryPage({ previewMode = false }: { previewMode?: boo
               <option value="">Todas as movimentações</option>
               <option value="withdrawal">Retiradas</option>
               <option value="return">Devoluções</option>
+            </select>
+          </label>
+          <label>
+            PESSOA
+            <select value={filters.personId ?? ''} onChange={(event) => updateFilter('personId', event.target.value ? Number(event.target.value) : null)}>
+              <option value="">Todas as pessoas</option>
+              {listPeople(movements).map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}
             </select>
           </label>
           <label>
@@ -171,27 +184,36 @@ export default function HistoryPage({ previewMode = false }: { previewMode?: boo
           <table className="history-table">
             <thead><tr>
               <th scope="col">DATA / HORA</th><th scope="col">CHAVE / IMÓVEL</th>
-              <th scope="col">MOVIMENTAÇÃO</th><th scope="col">RESPONSÁVEL</th><th scope="col">OBSERVAÇÕES</th>
+              <th scope="col">MOVIMENTAÇÃO</th><th scope="col">RESPONSÁVEL</th><th scope="col">DURAÇÃO REAL</th><th scope="col">OBSERVAÇÕES</th>
             </tr></thead>
             <tbody>
               {available && visible.map((movement) => {
                 const date = new Date(movement.created_at)
+                const person = movement.person && movement.person_id !== null
+                  ? { id: movement.person_id, name: movement.person.name, example: preview }
+                  : null
                 return (
                   <tr key={movement.id}>
-                    <td><time dateTime={movement.created_at}><span className="history-date">{dateFormat.format(date)}</span><span className="history-secondary history-time">{timeFormat.format(date)}</span></time></td>
+                    <td><time dateTime={movement.created_at}><span className="history-date">{formatDate(date)}</span><span className="history-secondary history-time">{formatTime(date)}</span></time></td>
                     <td><span className="history-key-code">{movement.key.code}</span><span className="history-secondary">{movement.key.description}</span></td>
                     <td><span className={`history-badge history-badge-${movement.type}`}><span aria-hidden="true">{movement.type === 'withdrawal' ? '↗' : '↙'}</span>{movement.type === 'withdrawal' ? 'RETIRADA' : 'DEVOLUÇÃO'}</span></td>
-                    <td><span className="history-person">{movement.person?.name ?? 'Não informado'}</span><span className="history-secondary">Registrado por {movement.operator?.name ?? 'usuário não informado'}</span></td>
+                    <td>
+                      {person && onOpenPerson
+                        ? <button className="person-link" type="button" onClick={() => onOpenPerson(person)} title="Ver histórico de retiradas">{person.name}</button>
+                        : <span className="history-person">{movement.person?.name ?? 'Não informado'}</span>}
+                      <span className="history-secondary">Registrado por {movement.operator?.name ?? 'usuário não informado'}</span>
+                    </td>
+                    <td>{movement.loan ? <><LoanDuration loan={movement.loan} now={now} /><LoanStatusBadge loan={movement.loan} /></> : <span aria-label="Sem duração calculada">—</span>}</td>
                     <td className="history-notes">{movement.notes || <span aria-label="Sem observações">—</span>}</td>
                   </tr>
                 )
               })}
               {(!available || visible.length === 0) && (
-                <tr><td colSpan={5}>
+                <tr><td colSpan={COLUMNS}>
                   <div className="history-empty" role="status">
                     <span className="history-empty-icon"><HistoryIcon search={available && hasFilters} /></span>
-                    <h4>{!preview && state.status === 'loading' ? 'Carregando histórico...' : !preview && state.status === 'error' ? 'Não foi possível carregar o histórico' : !preview && state.status === 'unavailable' ? 'Histórico ainda não disponível' : hasFilters ? 'Nenhuma movimentação encontrada' : 'Nenhuma movimentação registrada'}</h4>
-                    <p>{!preview && state.status === 'loading' ? 'Aguarde enquanto consultamos os registros.' : !preview && state.status === 'error' ? 'Verifique sua conexão e tente novamente.' : !preview && state.status === 'unavailable' ? 'Você pode explorar os dados de exemplo enquanto os registros não estão disponíveis.' : hasFilters ? 'Tente buscar outro termo ou ajustar o período selecionado.' : 'As retiradas e devoluções aparecerão aqui quando forem registradas.'}</p>
+                    <h4>{!preview && state.status === 'loading' ? 'Carregando histórico...' : !preview && state.status === 'error' ? 'Não foi possível carregar o histórico' : hasFilters ? 'Nenhuma movimentação encontrada' : 'Nenhuma movimentação registrada'}</h4>
+                    <p>{!preview && state.status === 'loading' ? 'Aguarde enquanto consultamos os registros.' : !preview && state.status === 'error' ? 'Verifique sua conexão e tente novamente.' : hasFilters ? 'Tente buscar outro termo ou ajustar o período selecionado.' : 'As retiradas e devoluções aparecerão aqui quando forem registradas.'}</p>
                     {!preview && state.status === 'error' && <button className="history-button" type="button" onClick={retry}>TENTAR NOVAMENTE</button>}
                     {available && hasFilters && <button className="history-clear" type="button" onClick={clearFilters}>Limpar filtros</button>}
                   </div>

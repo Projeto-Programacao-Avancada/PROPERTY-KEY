@@ -2,6 +2,8 @@
 
 import { useState } from 'react'
 import type { ApiKey } from '../../lib/api'
+import { useNow } from '../../lib/useNow'
+import { formatDateTime, formatDuration, minutesBetween, type PersonRef } from '../history/types'
 import './keys.css'
 
 function CabinetHook() {
@@ -36,22 +38,35 @@ function CabinetKey() {
   )
 }
 
+// Valor de <input type="datetime-local"> (horário local, sem fuso) para uma data.
+const toLocalInput = (date: Date) =>
+  new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16)
+
 type KeysPageProps = {
   keys: ApiKey[]
-  onWithdraw: (keyId: number, responsibleName: string, document: string, notes: string) => Promise<string | null>
+  onWithdraw: (
+    keyId: number,
+    responsibleName: string,
+    document: string,
+    notes: string,
+    expectedReturnAt: string | null
+  ) => Promise<string | null>
   onReturn: (keyId: number, responsibleName: string, document: string, notes: string) => Promise<string | null>
   onUpdate: (keyId: number, code: string, description: string) => Promise<string | null>
   onDelete: (keyId: number) => Promise<string | null>
+  onOpenPerson?: (person: PersonRef) => void
   readOnly?: boolean
 }
 
-export default function KeysPage({ keys, onWithdraw, onReturn, onUpdate, onDelete, readOnly = false }: KeysPageProps) {
+export default function KeysPage({ keys, onWithdraw, onReturn, onUpdate, onDelete, onOpenPerson, readOnly = false }: KeysPageProps) {
+  const now = useNow()
   const [search, setSearch] = useState('')
   const [selectedKey, setSelectedKey] = useState<ApiKey | null>(null)
   const [action, setAction] = useState<'withdrawal' | 'return'>('withdrawal')
   const [responsibleName, setResponsibleName] = useState('')
   const [document, setDocument] = useState('')
   const [notes, setNotes] = useState('')
+  const [expectedReturn, setExpectedReturn] = useState('')
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
   const [cabinetPage, setCabinetPage] = useState(0)
@@ -88,6 +103,7 @@ export default function KeysPage({ keys, onWithdraw, onReturn, onUpdate, onDelet
     setResponsibleName('')
     setDocument('')
     setNotes('')
+    setExpectedReturn('')
     setError('')
   }
 
@@ -145,6 +161,7 @@ export default function KeysPage({ keys, onWithdraw, onReturn, onUpdate, onDelet
     setResponsibleName('')
     setDocument('')
     setNotes('')
+    setExpectedReturn('')
     setError('')
   }
 
@@ -158,16 +175,18 @@ export default function KeysPage({ keys, onWithdraw, onReturn, onUpdate, onDelet
       return
     }
 
+    const expectedDate = action === 'withdrawal' && expectedReturn ? new Date(expectedReturn) : null
+    if (expectedDate && expectedDate.getTime() < Date.now() - 60_000) {
+      setError('A previsão de devolução deve ser uma data futura.')
+      return
+    }
+
     setSaving(true)
     setError('')
     try {
-      const submit = action === 'withdrawal' ? onWithdraw : onReturn
-      const message = await submit(
-        selectedKey.id,
-        responsibleName.trim(),
-        document.trim(),
-        notes.trim()
-      )
+      const message = action === 'withdrawal'
+        ? await onWithdraw(selectedKey.id, responsibleName.trim(), document.trim(), notes.trim(), expectedDate?.toISOString() ?? null)
+        : await onReturn(selectedKey.id, responsibleName.trim(), document.trim(), notes.trim())
       if (message) {
         setError(message)
         return
@@ -176,6 +195,7 @@ export default function KeysPage({ keys, onWithdraw, onReturn, onUpdate, onDelet
       setResponsibleName('')
       setDocument('')
       setNotes('')
+      setExpectedReturn('')
       setError('')
     } finally {
       setSaving(false)
@@ -287,6 +307,9 @@ export default function KeysPage({ keys, onWithdraw, onReturn, onUpdate, onDelet
               <tbody>
                 {filteredKeys.map((key) => {
                   const isAvailable = key.status === 'available'
+                  const responsible = key.status === 'withdrawn' && key.responsible && key.responsible_id != null
+                    ? { id: key.responsible_id, name: key.responsible }
+                    : null
 
                   return (
                     <tr key={key.id}>
@@ -309,22 +332,41 @@ export default function KeysPage({ keys, onWithdraw, onReturn, onUpdate, onDelet
                       </td>
 
                       <td className="key-responsible">
-                        {key.status === 'withdrawn' ? key.responsible || '—' : '—'}
+                        {responsible && onOpenPerson ? (
+                          <button
+                            type="button"
+                            className="person-link"
+                            title="Ver histórico de retiradas"
+                            onClick={() => onOpenPerson(responsible)}
+                          >
+                            {responsible.name}
+                          </button>
+                        ) : (key.status === 'withdrawn' && key.responsible) || '—'}
                       </td>
 
                       <td className="key-since">
-                        {key.status === 'withdrawn' && key.since
-                          ? new Date(key.since).toLocaleString('pt-BR', {
+                        {key.status === 'withdrawn' && key.since ? (
+                          <>
+                            {new Date(key.since).toLocaleString('pt-BR', {
                               dateStyle: 'short',
                               timeStyle: 'short',
-                            })
-                          : '—'}
+                            })}
+                            <span className="key-since-detail">
+                              em posse há {formatDuration(minutesBetween(key.since, now))}
+                            </span>
+                            {key.expected_return_at && (
+                              <span className="key-since-detail">
+                                previsão {formatDateTime(key.expected_return_at)}
+                              </span>
+                            )}
+                          </>
+                        ) : '—'}
                       </td>
 
                       <td>
                         <span className="key-images">
                           <span aria-hidden="true">▧</span>
-                          0
+                          {key.image_count ?? 0}
                         </span>
                       </td>
 
@@ -428,6 +470,12 @@ export default function KeysPage({ keys, onWithdraw, onReturn, onUpdate, onDelet
                         })
                       : 'Data não informada'}
                   </time>
+                  {selectedKey.since && (
+                    <p className="key-return-elapsed">
+                      Em posse há <strong>{formatDuration(minutesBetween(selectedKey.since, now))}</strong>
+                      {selectedKey.expected_return_at && ` (previsão ${formatDateTime(selectedKey.expected_return_at)})`}
+                    </p>
+                  )}
                 </div>
               )}
 
@@ -459,6 +507,19 @@ export default function KeysPage({ keys, onWithdraw, onReturn, onUpdate, onDelet
                 autoComplete="off"
                 required={action === 'withdrawal'}
               />
+
+              {action === 'withdrawal' && (
+                <>
+                  <label htmlFor="key-withdraw-due">PREVISÃO DE DEVOLUÇÃO</label>
+                  <input
+                    id="key-withdraw-due"
+                    type="datetime-local"
+                    value={expectedReturn}
+                    min={toLocalInput(now)}
+                    onChange={(event) => setExpectedReturn(event.target.value)}
+                  />
+                </>
+              )}
 
               <label htmlFor="key-withdraw-notes">OBSERVAÇÕES</label>
               <input

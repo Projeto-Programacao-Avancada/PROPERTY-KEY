@@ -825,6 +825,19 @@
   font-size: 13px;
 }
 
+.key-since-detail {
+  display: block;
+  margin-top: 3px;
+  color: #888;
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+}
+
+.key-return-summary .key-return-elapsed {
+  margin: 8px 0 0;
+  font-size: 12px;
+}
+
 /* RESPONSIVIDADE */
 
 @media (min-width: 651px) and (max-width: 1050px) {

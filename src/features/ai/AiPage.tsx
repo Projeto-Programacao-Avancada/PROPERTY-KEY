@@ -4,13 +4,15 @@ import './ai.css'
 
 export default function AiPage({ keys, previewMode }: { keys: ApiKey[]; previewMode: boolean }) {
   const [keyId, setKeyId] = useState('')
-  const [status, setStatus] = useState<'loading' | 'ready' | 'missing' | 'error'>('loading')
+  const [status, setStatus] = useState<'loading' | 'ready' | 'missing' | 'error'>(() =>
+    previewMode ? 'missing' : 'loading'
+  )
   const [prediction, setPrediction] = useState<AiPrediction | null>(null)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
-    if (previewMode) { setStatus('missing'); return }
+    if (previewMode) return
     fetchAiStatus().then((result) => setStatus(result.available ? 'ready' : 'missing'))
       .catch(() => setStatus('error'))
   }, [previewMode])

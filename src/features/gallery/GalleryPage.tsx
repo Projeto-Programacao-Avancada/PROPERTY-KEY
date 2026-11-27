@@ -1,22 +1,23 @@
-
-import { useRef, useState } from 'react'
-import type { ApiKey } from '../../lib/api'
+import { useEffect, useRef, useState } from 'react'
+import {
+  ApiError,
+  deleteGalleryImage,
+  fetchGalleryImageBlob,
+  fetchGalleryImages,
+  type ApiGalleryImage,
+  type ApiKey,
+  type GalleryCategory,
+  uploadGalleryImage,
+} from '../../lib/api'
 import './gallery.css'
 
 type GalleryPageProps = {
   keys: ApiKey[]
+  previewMode?: boolean
+  onGalleryChange?: () => void
 }
 
-type GalleryImage = {
-  id: string
-  name: string
-  description: string
-  category: string
-  keyCode: string
-  url: string
-}
-
-const categories = [
+const categories: GalleryCategory[] = [
   'Fachada',
   'Imóvel',
   'Chave',
@@ -24,86 +25,299 @@ const categories = [
   'Outros',
 ]
 
-export default function GalleryPage({ keys }: GalleryPageProps) {
-  const fileInputRef = useRef<HTMLInputElement>(null)
+const ALLOWED_MIME_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp'])
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024
 
-  const [images, setImages] = useState<GalleryImage[]>([])
+function errorMessage(error: unknown) {
+  return error instanceof ApiError || error instanceof Error
+    ? error.message
+    : 'Erro inesperado na galeria.'
+}
+
+function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        resolve(reader.result)
+      } else {
+        reject(new Error('Não foi possível ler o arquivo selecionado.'))
+      }
+    }
+    reader.onerror = () => reject(new Error('Não foi possível ler o arquivo selecionado.'))
+    reader.readAsDataURL(file)
+  })
+}
+
+export default function GalleryPage({
+  keys,
+  previewMode = false,
+  onGalleryChange,
+}: GalleryPageProps) {
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const previewUrlRef = useRef('')
+  const blobUrlsRef = useRef<Record<number, string>>({})
+  const nextPreviewIdRef = useRef(-1)
+
+  const [images, setImages] = useState<ApiGalleryImage[]>([])
+  const [blobUrls, setBlobUrls] = useState<Record<number, string>>({})
+  const [failedBlobIds, setFailedBlobIds] = useState<Record<number, boolean>>({})
+  const [loading, setLoading] = useState(!previewMode)
+  const [loadError, setLoadError] = useState('')
+  const [reloadToken, setReloadToken] = useState(0)
+
   const [search, setSearch] = useState('')
-  const [categoryFilter, setCategoryFilter] = useState('Todas')
-  const [selectedKey, setSelectedKey] = useState('')
-  const [selectedCategory, setSelectedCategory] = useState('Imóvel')
+  const [categoryFilter, setCategoryFilter] = useState<'Todas' | GalleryCategory>('Todas')
+  const [selectedKeyId, setSelectedKeyId] = useState('')
+  const [selectedCategory, setSelectedCategory] = useState<GalleryCategory>('Imóvel')
   const [description, setDescription] = useState('')
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [preview, setPreview] = useState('')
-  const [selectedImage, setSelectedImage] = useState<GalleryImage | null>(null)
+  const [formError, setFormError] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [deletingId, setDeletingId] = useState<number | null>(null)
+  const [selectedImage, setSelectedImage] = useState<ApiGalleryImage | null>(null)
+
+  function revokeAllBlobUrls() {
+    for (const url of Object.values(blobUrlsRef.current)) {
+      URL.revokeObjectURL(url)
+    }
+    blobUrlsRef.current = {}
+  }
+
+  useEffect(() => {
+    return () => {
+      if (previewUrlRef.current) {
+        URL.revokeObjectURL(previewUrlRef.current)
+      }
+      revokeAllBlobUrls()
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!selectedImage) return
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setSelectedImage(null)
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [selectedImage])
+
+  useEffect(() => {
+    if (previewMode) return
+
+    let cancelled = false
+
+    async function loadGallery() {
+      setLoading(true)
+      setLoadError('')
+      try {
+        const list = await fetchGalleryImages()
+        if (cancelled) return
+
+        setImages(list)
+
+        const validIds = new Set(list.map((item) => item.id))
+        const nextMap: Record<number, string> = {}
+        for (const [idStr, url] of Object.entries(blobUrlsRef.current)) {
+          const id = Number(idStr)
+          if (validIds.has(id)) {
+            nextMap[id] = url
+          } else {
+            URL.revokeObjectURL(url)
+          }
+        }
+        blobUrlsRef.current = nextMap
+        setBlobUrls({ ...nextMap })
+        setFailedBlobIds({})
+
+        const missing = list.filter((item) => !nextMap[item.id])
+        await Promise.allSettled(
+          missing.map(async (item) => {
+            try {
+              const objectUrl = await fetchGalleryImageBlob(item.id)
+              if (cancelled) {
+                URL.revokeObjectURL(objectUrl)
+                return
+              }
+              const previous = blobUrlsRef.current[item.id]
+              if (previous) URL.revokeObjectURL(previous)
+              blobUrlsRef.current[item.id] = objectUrl
+              setBlobUrls((current) => ({ ...current, [item.id]: objectUrl }))
+            } catch {
+              if (!cancelled) {
+                setFailedBlobIds((current) => ({ ...current, [item.id]: true }))
+              }
+            }
+          })
+        )
+      } catch (error) {
+        if (cancelled) return
+        console.error('Erro ao carregar galeria:', error)
+        setLoadError(errorMessage(error))
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+
+    loadGallery()
+
+    return () => {
+      cancelled = true
+    }
+  }, [previewMode, reloadToken])
 
   function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0]
+    setFormError('')
 
     if (!file) return
 
-    if (!file.type.startsWith('image/')) {
-      alert('Selecione um arquivo de imagem.')
+    if (!ALLOWED_MIME_TYPES.has(file.type)) {
+      setFormError('Selecione uma imagem PNG, JPEG ou WebP.')
       event.target.value = ''
       return
     }
 
-    if (preview) URL.revokeObjectURL(preview)
-
-    setSelectedFile(file)
-    setPreview(URL.createObjectURL(file))
-  }
-
-  function handleAddImage(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-
-    if (!selectedFile || !preview) {
-      alert('Selecione uma imagem antes de cadastrar.')
+    if (file.size > MAX_IMAGE_BYTES) {
+      setFormError('A imagem ultrapassa o limite máximo de 10 MB.')
+      event.target.value = ''
       return
     }
 
-    const newImage: GalleryImage = {
-      id: crypto.randomUUID(),
-      name: selectedFile.name,
-      description: description.trim(),
-      category: selectedCategory,
-      keyCode: selectedKey,
-      url: preview,
+    if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current)
+
+    const nextPreview = URL.createObjectURL(file)
+    previewUrlRef.current = nextPreview
+    setSelectedFile(file)
+    setPreview(nextPreview)
+  }
+
+  async function handleAddImage(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+
+    if (!selectedFile || !preview) {
+      setFormError('Selecione uma imagem antes de cadastrar.')
+      return
     }
 
-    setImages((current) => [newImage, ...current])
+    setFormError('')
+    const numericKeyId = selectedKeyId ? Number(selectedKeyId) : null
+    const linkedKey = numericKeyId !== null
+      ? keys.find((key) => key.id === numericKeyId) ?? null
+      : null
 
+    if (previewMode) {
+      const localId = nextPreviewIdRef.current--
+      const localUrl = URL.createObjectURL(selectedFile)
+      blobUrlsRef.current[localId] = localUrl
+      setBlobUrls((current) => ({ ...current, [localId]: localUrl }))
+
+      const localImage: ApiGalleryImage = {
+        id: localId,
+        name: selectedFile.name,
+        description: description.trim() || null,
+        category: selectedCategory,
+        key_id: linkedKey?.id ?? null,
+        key_code: linkedKey?.code ?? null,
+        key_description: linkedKey?.description ?? null,
+        mime_type: selectedFile.type,
+        size_bytes: selectedFile.size,
+        url: localUrl,
+        created_at: new Date().toISOString(),
+      }
+      setImages((current) => [localImage, ...current])
+      resetForm()
+      return
+    }
+
+    setSaving(true)
+    try {
+      const imageData = await fileToDataUrl(selectedFile)
+      const created = await uploadGalleryImage({
+        name: selectedFile.name,
+        description: description.trim() || null,
+        category: selectedCategory,
+        key_id: numericKeyId,
+        image_data: imageData,
+      })
+
+      const savedObjectUrl = URL.createObjectURL(selectedFile)
+      const previous = blobUrlsRef.current[created.id]
+      if (previous) URL.revokeObjectURL(previous)
+      blobUrlsRef.current[created.id] = savedObjectUrl
+      setBlobUrls((current) => ({ ...current, [created.id]: savedObjectUrl }))
+      setImages((current) => [created, ...current])
+
+      resetForm()
+      onGalleryChange?.()
+    } catch (error) {
+      console.error('Erro ao salvar imagem na galeria:', error)
+      setFormError(errorMessage(error))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  function resetForm() {
+    if (previewUrlRef.current) {
+      URL.revokeObjectURL(previewUrlRef.current)
+      previewUrlRef.current = ''
+    }
     setSelectedFile(null)
     setPreview('')
     setDescription('')
-    setSelectedKey('')
-
+    setSelectedKeyId('')
     if (fileInputRef.current) {
       fileInputRef.current.value = ''
     }
   }
 
-  function handleDeleteImage(image: GalleryImage) {
+  async function handleDeleteImage(image: ApiGalleryImage) {
     const confirmed = window.confirm(
       'Deseja realmente excluir esta imagem da galeria?'
     )
 
     if (!confirmed) return
 
-    URL.revokeObjectURL(image.url)
+    setDeletingId(image.id)
+    setLoadError('')
+    try {
+      if (!previewMode) {
+        await deleteGalleryImage(image.id)
+      }
 
-    setImages((current) =>
-      current.filter((item) => item.id !== image.id)
-    )
+      const cachedUrl = blobUrlsRef.current[image.id]
+      if (cachedUrl) {
+        URL.revokeObjectURL(cachedUrl)
+        delete blobUrlsRef.current[image.id]
+        setBlobUrls((current) => {
+          const next = { ...current }
+          delete next[image.id]
+          return next
+        })
+      }
 
-    if (selectedImage?.id === image.id) {
-      setSelectedImage(null)
+      setImages((current) => current.filter((item) => item.id !== image.id))
+
+      if (selectedImage?.id === image.id) {
+        setSelectedImage(null)
+      }
+
+      if (!previewMode) {
+        onGalleryChange?.()
+      }
+    } catch (error) {
+      console.error('Erro ao excluir imagem da galeria:', error)
+      setLoadError(errorMessage(error))
+    } finally {
+      setDeletingId(null)
     }
   }
 
   const filteredImages = images.filter((image) => {
     const matchesSearch =
-      `${image.name} ${image.description} ${image.keyCode}`
+      `${image.name} ${image.description ?? ''} ${image.key_code ?? ''} ${image.key_description ?? ''}`
         .toLowerCase()
         .includes(search.toLowerCase())
 
@@ -125,14 +339,20 @@ export default function GalleryPage({ keys }: GalleryPageProps) {
         </div>
 
         <span className="gallery-counter">
-          {images.length} imagens
+          {images.length} {images.length === 1 ? 'imagem' : 'imagens'}
         </span>
       </section>
+
+      {previewMode && (
+        <p className="gallery-notice" role="status">
+          Modo de prévia ativo: imagens adicionadas aqui ficam apenas nesta sessão e não são enviadas ao servidor.
+        </p>
+      )}
 
       <section className="gallery-upload-card">
         <div className="gallery-section-heading">
           <h3>ADICIONAR IMAGEM</h3>
-          <p>Selecione uma imagem e informe seus dados.</p>
+          <p>Selecione uma imagem (PNG, JPEG ou WebP, até 10 MB) e informe seus dados.</p>
         </div>
 
         <form onSubmit={handleAddImage}>
@@ -148,6 +368,7 @@ export default function GalleryPage({ keys }: GalleryPageProps) {
                 type="file"
                 accept="image/png,image/jpeg,image/webp"
                 onChange={handleFileChange}
+                disabled={saving}
                 required
               />
 
@@ -167,8 +388,9 @@ export default function GalleryPage({ keys }: GalleryPageProps) {
                 id="gallery-category"
                 value={selectedCategory}
                 onChange={(event) =>
-                  setSelectedCategory(event.target.value)
+                  setSelectedCategory(event.target.value as GalleryCategory)
                 }
+                disabled={saving}
               >
                 {categories.map((category) => (
                   <option key={category} value={category}>
@@ -183,14 +405,15 @@ export default function GalleryPage({ keys }: GalleryPageProps) {
 
               <select
                 id="gallery-key"
-                value={selectedKey}
+                value={selectedKeyId}
                 onChange={(event) =>
-                  setSelectedKey(event.target.value)
+                  setSelectedKeyId(event.target.value)
                 }
+                disabled={saving}
               >
                 <option value="">Nenhuma associação</option>
                 {keys.map((key) => (
-                  <option key={key.id} value={key.code}>
+                  <option key={key.id} value={String(key.id)}>
                     {key.code} - {key.description}
                   </option>
                 ))}
@@ -208,13 +431,22 @@ export default function GalleryPage({ keys }: GalleryPageProps) {
                 }
                 placeholder="Descreva a imagem..."
                 rows={3}
+                maxLength={2000}
+                disabled={saving}
               />
+
+              {formError && (
+                <p className="gallery-error" role="alert">
+                  {formError}
+                </p>
+              )}
 
               <button
                 className="gallery-add-button"
                 type="submit"
+                disabled={saving}
               >
-                + ADICIONAR IMAGEM
+                {saving ? 'ENVIANDO...' : '+ ADICIONAR IMAGEM'}
               </button>
             </div>
           </div>
@@ -240,7 +472,7 @@ export default function GalleryPage({ keys }: GalleryPageProps) {
           <select
             value={categoryFilter}
             onChange={(event) =>
-              setCategoryFilter(event.target.value)
+              setCategoryFilter(event.target.value as 'Todas' | GalleryCategory)
             }
             aria-label="Filtrar por categoria"
           >
@@ -253,57 +485,89 @@ export default function GalleryPage({ keys }: GalleryPageProps) {
           </select>
         </div>
 
-        {filteredImages.length > 0 ? (
+        {loadError && (
+          <div className="gallery-error-box" role="alert">
+            <p>{loadError}</p>
+            {!previewMode && (
+              <button
+                type="button"
+                onClick={() => setReloadToken((current) => current + 1)}
+              >
+                TENTAR NOVAMENTE
+              </button>
+            )}
+          </div>
+        )}
+
+        {loading ? (
+          <div className="gallery-empty" role="status">
+            <h3>Carregando galeria...</h3>
+            <p>Aguarde enquanto buscamos as imagens salvas no servidor.</p>
+          </div>
+        ) : filteredImages.length > 0 ? (
           <div className="gallery-grid">
-            {filteredImages.map((image) => (
-              <article className="gallery-image-card" key={image.id}>
-                <button
-                  type="button"
-                  className="gallery-image-preview"
-                  onClick={() => setSelectedImage(image)}
-                  aria-label={`Visualizar ${image.name}`}
-                >
-                  <img
-                    src={image.url}
-                    alt={image.description || image.name}
-                  />
-                </button>
+            {filteredImages.map((image) => {
+              const imageSrc = blobUrls[image.id]
+              const isDeleting = deletingId === image.id
 
-                <div className="gallery-image-info">
-                  <span className="gallery-category">
-                    {image.category}
-                  </span>
+              return (
+                <article className="gallery-image-card" key={image.id}>
+                  <button
+                    type="button"
+                    className="gallery-image-preview"
+                    onClick={() => setSelectedImage(image)}
+                    aria-label={`Visualizar ${image.name}`}
+                  >
+                    {imageSrc ? (
+                      <img
+                        src={imageSrc}
+                        alt={image.description || image.name}
+                      />
+                    ) : (
+                      <span className="gallery-image-fallback">
+                        {failedBlobIds[image.id] ? 'Imagem indisponível' : 'Carregando imagem...'}
+                      </span>
+                    )}
+                  </button>
 
-                  <h4>{image.name}</h4>
+                  <div className="gallery-image-info">
+                    <span className="gallery-category">
+                      {image.category}
+                    </span>
 
-                  <p>
-                    {image.description || 'Sem descrição'}
-                  </p>
+                    <h4>{image.name}</h4>
 
-                  <span className="gallery-key-reference">
-                    {image.keyCode
-                      ? `Chave: ${image.keyCode}`
-                      : 'Sem chave associada'}
-                  </span>
+                    <p>
+                      {image.description || 'Sem descrição'}
+                    </p>
 
-                  <div className="gallery-card-actions">
-                    <button
-                      type="button"
-                      onClick={() => setSelectedImage(image)}
-                    >
-                      VISUALIZAR
-                    </button>
+                    <span className="gallery-key-reference">
+                      {image.key_code
+                        ? `Chave: ${image.key_code}`
+                        : 'Sem chave associada'}
+                    </span>
 
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteImage(image)}
-                    >
-                      EXCLUIR
-                    </button>
+                    <div className="gallery-card-actions">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedImage(image)}
+                        disabled={isDeleting}
+                      >
+                        VISUALIZAR
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteImage(image)}
+                        disabled={isDeleting}
+                      >
+                        {isDeleting ? 'EXCLUINDO...' : 'EXCLUIR'}
+                      </button>
+                    </div>
                   </div>
-                </div>
-              </article>
-            ))}
+                </article>
+              )
+            })}
           </div>
         ) : (
           <div className="gallery-empty">
@@ -339,16 +603,27 @@ export default function GalleryPage({ keys }: GalleryPageProps) {
               ×
             </button>
 
-            <img
-              src={selectedImage.url}
-              alt={selectedImage.description || selectedImage.name}
-            />
+            {blobUrls[selectedImage.id] ? (
+              <img
+                src={blobUrls[selectedImage.id]}
+                alt={selectedImage.description || selectedImage.name}
+              />
+            ) : (
+              <div className="gallery-modal-fallback">
+                Imagem indisponível para visualização.
+              </div>
+            )}
 
             <h3>{selectedImage.name}</h3>
             <p>{selectedImage.description || 'Sem descrição'}</p>
-            <span>
-              Categoria: {selectedImage.category}
-            </span>
+            <div className="gallery-modal-meta">
+              <span>Categoria: {selectedImage.category}</span>
+              <span>
+                {selectedImage.key_code
+                  ? `Chave: ${selectedImage.key_code}`
+                  : 'Sem chave associada'}
+              </span>
+            </div>
           </section>
         </div>
       )}

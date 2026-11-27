@@ -281,6 +281,49 @@ Com o backend e o frontend em execução:
 O frontend e o backend precisam estar executando ao mesmo tempo. Se
 fechar um dos terminais, o serviço correspondente será interrompido.
 
+## Duração real, média de demora e histórico por pessoa
+
+**Bancos já existentes:** execute uma vez `mysql/migrations/2026-11-27_add_movement_due_at.sql`.
+Ela adiciona `key_movements.due_at` (previsão de devolução, opcional). Bancos novos
+já recebem a coluna pelo `mysql/schema.sql`. Retiradas antigas continuam válidas:
+sem previsão, o atraso delas não é calculado (fica `null`), mas a duração real é.
+
+- Cada retirada é pareada com a próxima devolução da mesma chave. A duração real é a
+  diferença entre as duas, em minutos inteiros (`duracao_real_minutos`); enquanto a
+  chave não volta, a API informa `em_posse_minutos`.
+- `atraso_minutos` = devolução menos previsão, ou `0` se devolvida no prazo.
+- A **média de demora** considera só devoluções com previsão; a **duração média**
+  considera todas as devoluções concluídas. Posses em aberto ficam fora das médias.
+- `GET /api/movements` devolve `{ movements, summary }` e aceita `person_id`, `key_id`,
+  `start_date` e `end_date`. `GET /api/people` traz `metrics` de cada pessoa e
+  `GET /api/people/{id}/history` traz o resumo e as retiradas dela.
+
+Testes (a partir da raiz do projeto):
+
+```powershell
+node --test src/features/history/history.test.mjs src/lib/router.test.mjs
+cd backend
+python -m unittest discover -s tests -t .
+```
+
+## Galeria persistida e padrão de routers
+
+**Bancos já existentes:** execute uma vez `mysql/migrations/2026-11-27_add_gallery_images.sql`
+(o backend também cria a tabela `gallery_images` automaticamente ao iniciar se ela ainda não existir).
+Bancos novos já recebem a tabela pelo `mysql/schema.sql`.
+
+- **Galeria no backend (`/api/gallery`):** `GET /api/gallery`, `POST /api/gallery`,
+  `GET /api/gallery/{id}/file` e `DELETE /api/gallery/{id}` (todos autenticados via Bearer JWT).
+  Os arquivos ficam salvos em `backend/uploads/gallery` (configurável por `UPLOAD_DIR`) e os
+  metadados no MySQL, preservando as imagens ao recarregar a página e atualizando o contador
+  de imagens por chave (`image_count`).
+- **Padrão de routers (backend):** todos os routers ficam em `backend/app/routers/`
+  (`auth`, `keys`, `movements`, `people`, `gallery`, `ai`) e são registrados em um único
+  `api_router` com prefixo `/api` em `backend/app/routers/__init__.py`.
+- **Padrão de rotas (frontend):** `src/lib/router.ts` sincroniza as telas com a URL do navegador
+  (`/dashboard`, `/historico`, `/chaves`, `/galeria`, `/ia`), mantendo a página atual ao recarregar
+  e suportando os botões Voltar/Avançar.
+
 ## Módulo de IA — previsão demonstrativa de atraso
 
 O módulo acadêmico utiliza Random Forest e uma base sintética identificada como tal.

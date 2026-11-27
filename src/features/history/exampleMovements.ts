@@ -1,4 +1,5 @@
-import type { HistoryMovement } from './types'
+import { calculateLoanTiming, summarizeLoans } from './types.ts'
+import type { HistoryMovement, Loan, MovementType, PersonHistory } from './types.ts'
 
 // Dados fictícios exclusivos da prévia. Nunca são enviados à API ou ao banco.
 const exampleKeys = [
@@ -8,30 +9,89 @@ const exampleKeys = [
   { id: 4, code: 'G01', description: 'Garagem — Acesso principal' },
   { id: 5, code: 'S01', description: 'Salão de festas' },
 ]
-const examplePeople = ['Mariana Costa', 'Lucas Almeida', 'Beatriz Santos', 'Pedro Oliveira']
+const examplePeople = [
+  { name: 'Mariana Costa', document: '12345678901' },
+  { name: 'Lucas Almeida', document: '23456789012' },
+  { name: 'Beatriz Santos', document: '34567890123' },
+  { name: 'Pedro Oliveira', document: '45678901234' },
+]
 
-export const exampleMovements: HistoryMovement[] = [
-  { key: 0, person: 0, type: 'return', date: '2026-10-22T10:42:00-03:00', notes: 'Chave entregue na recepção.' },
-  { key: 2, person: 1, type: 'withdrawal', date: '2026-10-22T10:15:00-03:00', notes: 'Visita ao imóvel.' },
-  { key: 4, person: 2, type: 'withdrawal', date: '2026-10-22T09:30:00-03:00', notes: 'Preparação do espaço para evento.' },
-  { key: 1, person: 3, type: 'return', date: '2026-10-22T09:05:00-03:00', notes: null },
-  { key: 3, person: 1, type: 'return', date: '2026-10-21T17:50:00-03:00', notes: 'Manutenção concluída.' },
-  { key: 0, person: 0, type: 'withdrawal', date: '2026-10-21T15:20:00-03:00', notes: 'Vistoria do apartamento.' },
-  { key: 1, person: 3, type: 'withdrawal', date: '2026-10-21T14:10:00-03:00', notes: 'Apresentação do imóvel.' },
-  { key: 3, person: 1, type: 'withdrawal', date: '2026-10-21T08:30:00-03:00', notes: 'Acesso para manutenção.' },
-  { key: 2, person: 2, type: 'return', date: '2026-10-20T16:45:00-03:00', notes: null },
-  { key: 4, person: 0, type: 'return', date: '2026-10-20T12:00:00-03:00', notes: 'Espaço conferido e fechado.' },
-  { key: 2, person: 2, type: 'withdrawal', date: '2026-10-20T09:10:00-03:00', notes: 'Vistoria de entrada.' },
-  { key: 4, person: 0, type: 'withdrawal', date: '2026-10-19T14:00:00-03:00', notes: 'Reserva do salão.' },
-].map((item, index) => ({
-  id: 1000 - index,
-  key_id: exampleKeys[item.key].id,
-  person_id: item.person + 1,
-  type: item.type as HistoryMovement['type'],
-  notes: item.notes,
-  created_at: item.date,
-  created_by: 1,
-  key: { code: exampleKeys[item.key].code, description: exampleKeys[item.key].description },
-  person: { name: examplePeople[item.person] },
-  operator: { name: 'Ana Ferreira' },
-}))
+const HOUR = 60
+const DAY = 24 * HOUR
+const now = new Date()
+const minutesAgo = (minutes: number) => new Date(now.getTime() - minutes * 60000).toISOString()
+
+// Datas relativas a "agora", para a prévia sempre mostrar posses em andamento realistas.
+// heldMinutes null = ainda em posse; dueAfterMinutes null = retirada sem previsão.
+const exampleLoanData = [
+  { key: 4, person: 0, ago: 3 * DAY + 21 * HOUR, heldMinutes: 22 * HOUR, dueAfterMinutes: 20 * HOUR,
+    notes: 'Reserva do salão.', returnNotes: 'Espaço conferido e fechado.' },
+  { key: 2, person: 2, ago: 2 * DAY + 13 * HOUR, heldMinutes: 7 * HOUR + 35, dueAfterMinutes: 8 * HOUR,
+    notes: 'Vistoria de entrada.', returnNotes: null },
+  { key: 3, person: 1, ago: DAY + 15 * HOUR, heldMinutes: 9 * HOUR + 20, dueAfterMinutes: null,
+    notes: 'Acesso para manutenção.', returnNotes: 'Manutenção concluída.' },
+  { key: 1, person: 3, ago: DAY + 10 * HOUR, heldMinutes: 19 * HOUR, dueAfterMinutes: 10 * HOUR,
+    notes: 'Apresentação do imóvel.', returnNotes: null },
+  { key: 0, person: 0, ago: DAY + 5 * HOUR, heldMinutes: 80, dueAfterMinutes: 3 * HOUR,
+    notes: 'Vistoria do apartamento.', returnNotes: 'Chave entregue na recepção.' },
+  { key: 2, person: 1, ago: 3 * HOUR + 50, heldMinutes: null, dueAfterMinutes: 6 * HOUR,
+    notes: 'Visita ao imóvel.', returnNotes: null },
+  { key: 4, person: 2, ago: 6 * HOUR + 50, heldMinutes: null, dueAfterMinutes: 5 * HOUR,
+    notes: 'Preparação do espaço para evento.', returnNotes: null },
+]
+
+const events = exampleLoanData
+  .flatMap((loan, loanIndex) => [
+    { loanIndex, type: 'withdrawal' as MovementType, ago: loan.ago },
+    ...(loan.heldMinutes === null ? [] : [{ loanIndex, type: 'return' as MovementType, ago: loan.ago - loan.heldMinutes }]),
+  ])
+  .sort((a, b) => b.ago - a.ago || (a.type === 'withdrawal' ? -1 : 1))
+  .map((event, index) => ({ ...event, id: index + 1 }))
+
+export const exampleLoans: Loan[] = exampleLoanData.map((data, loanIndex) => {
+  const withdrawal = events.find((event) => event.loanIndex === loanIndex && event.type === 'withdrawal')!
+  const returned = events.find((event) => event.loanIndex === loanIndex && event.type === 'return')
+  const dates = {
+    retirado_em: minutesAgo(data.ago),
+    previsto_em: data.dueAfterMinutes === null ? null : minutesAgo(data.ago - data.dueAfterMinutes),
+    devolvido_em: returned ? minutesAgo(returned.ago) : null,
+  }
+  return {
+    id: withdrawal.id,
+    key_id: exampleKeys[data.key].id,
+    key: { code: exampleKeys[data.key].code, description: exampleKeys[data.key].description },
+    person_id: data.person + 1,
+    person: { name: examplePeople[data.person].name },
+    ...dates,
+    ...calculateLoanTiming(dates, now),
+  }
+})
+
+export const exampleMovements: HistoryMovement[] = events.map((event) => {
+  const data = exampleLoanData[event.loanIndex]
+  return {
+    id: event.id,
+    key_id: exampleKeys[data.key].id,
+    person_id: data.person + 1,
+    type: event.type,
+    notes: event.type === 'withdrawal' ? data.notes : data.returnNotes,
+    created_at: minutesAgo(event.ago),
+    created_by: 1,
+    key: { code: exampleKeys[data.key].code, description: exampleKeys[data.key].description },
+    person: { name: examplePeople[data.person].name },
+    operator: { name: 'Ana Ferreira' },
+    loan: exampleLoans[event.loanIndex],
+  }
+}).sort((a, b) => b.id - a.id)
+
+export function examplePersonHistory(personId: number): PersonHistory {
+  const person = examplePeople[personId - 1]
+  const loans = exampleLoans
+    .filter((loan) => loan.person_id === personId)
+    .sort((a, b) => new Date(b.retirado_em).getTime() - new Date(a.retirado_em).getTime())
+  return {
+    person: { id: personId, name: person?.name ?? 'Pessoa de exemplo', phone: null, email: null, document: person?.document ?? null },
+    summary: summarizeLoans(loans),
+    loans,
+  }
+}

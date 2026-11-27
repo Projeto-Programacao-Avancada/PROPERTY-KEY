@@ -1,16 +1,36 @@
 from fastapi import APIRouter, Depends, HTTPException, Response, status
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..deps import get_current_user
-from ..models import Key, KeyMovement, Person, User
+from ..historico import now_local, to_local, to_naive_local
+from ..models import GalleryImage, Key, KeyMovement, Person, User
 from ..schemas import KeyCreate, KeyOut, KeyReturnIn, KeyWithdrawalIn
 
 router = APIRouter(prefix="/keys", tags=["keys"], dependencies=[Depends(get_current_user)])
 
 DUPLICATE_MSG = "Já existe uma chave com esse código."
+PAST_DUE_MSG = "A previsão de devolução deve ser uma data futura."
+
+
+def _due_fields(movement: KeyMovement | None, withdrawn: bool) -> dict:
+    """Campos de KeyOut que dependem da retirada em andamento."""
+    if not withdrawn or movement is None:
+        return {}
+    return {
+        "responsible_id": movement.person_id,
+        "since": movement.created_at,
+        "expected_return_at": to_local(movement.due_at) if movement.due_at else None,
+    }
+
+
+def _count_key_images(db: Session, key_id: int) -> int:
+    return int(
+        db.scalar(select(func.count(GalleryImage.id)).where(GalleryImage.key_id == key_id))
+        or 0
+    )
 
 
 @router.get("", response_model=list[KeyOut])
@@ -23,15 +43,30 @@ def list_keys(db: Session = Depends(get_db)):
         .group_by(KeyMovement.key_id)
         .subquery()
     )
+    image_counts = (
+        select(
+            GalleryImage.key_id.label("key_id"),
+            func.count(GalleryImage.id).label("image_count"),
+        )
+        .where(GalleryImage.key_id.is_not(None))
+        .group_by(GalleryImage.key_id)
+        .subquery()
+    )
     rows = db.execute(
-        select(Key, KeyMovement, Person.name)
+        select(
+            Key,
+            KeyMovement,
+            Person.name,
+            func.coalesce(image_counts.c.image_count, 0),
+        )
         .outerjoin(latest_movement, latest_movement.c.key_id == Key.id)
         .outerjoin(KeyMovement, KeyMovement.id == latest_movement.c.movement_id)
         .outerjoin(Person, Person.id == KeyMovement.person_id)
+        .outerjoin(image_counts, image_counts.c.key_id == Key.id)
         .order_by(Key.code)
     )
     result = []
-    for key, movement, person_name in rows:
+    for key, movement, person_name, image_count in rows:
         withdrawn = key.status == "withdrawn" and movement is not None
         result.append(
             KeyOut(
@@ -40,7 +75,8 @@ def list_keys(db: Session = Depends(get_db)):
                 description=key.description,
                 status=key.status,
                 responsible=person_name if withdrawn else None,
-                since=movement.created_at if withdrawn else None,
+                image_count=int(image_count or 0),
+                **_due_fields(movement, withdrawn),
             )
         )
     return result
@@ -96,13 +132,12 @@ def update_key(
         .where(KeyMovement.key_id == key.id)
         .order_by(KeyMovement.id.desc())
     )
+    withdrawn = key.status == "withdrawn" and movement is not None
     responsible = None
-    since = None
-    if key.status == "withdrawn" and movement is not None:
+    if withdrawn:
         responsible = db.scalar(
             select(Person.name).where(Person.id == movement.person_id)
         )
-        since = movement.created_at
 
     return KeyOut(
         id=key.id,
@@ -110,7 +145,8 @@ def update_key(
         description=key.description,
         status=key.status,
         responsible=responsible,
-        since=since,
+        image_count=_count_key_images(db, key.id),
+        **_due_fields(movement, withdrawn),
     )
 
 
@@ -129,8 +165,13 @@ def delete_key(
         )
 
     try:
-        # O schema MySQL usa ON DELETE CASCADE; remover explicitamente também
-        # mantém o mesmo comportamento no SQLite local, que não ativa FKs por padrão.
+        # O schema MySQL usa ON DELETE CASCADE/SET NULL; manter explícito garante
+        # o mesmo comportamento no SQLite local, que não ativa FKs por padrão.
+        db.execute(
+            update(GalleryImage)
+            .where(GalleryImage.key_id == key.id)
+            .values(key_id=None)
+        )
         db.execute(delete(KeyMovement).where(KeyMovement.key_id == key.id))
         db.delete(key)
         db.commit()
@@ -156,6 +197,12 @@ def withdraw_key(
     if key.status != "available":
         raise HTTPException(status.HTTP_409_CONFLICT, "Esta chave já está retirada.")
 
+    # Tolerância de 1 minuto para relógios do navegador levemente adiantados.
+    if data.expected_return_at is not None and (
+        (to_local(data.expected_return_at) - now_local()).total_seconds() < -60
+    ):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, PAST_DUE_MSG)
+
     person = db.scalar(select(Person).where(Person.document == data.document))
     if person is not None and person.name.casefold() != data.responsible_name.casefold():
         raise HTTPException(
@@ -173,6 +220,11 @@ def withdraw_key(
             person_id=person.id,
             type="withdrawal",
             notes=data.notes,
+            due_at=(
+                to_naive_local(data.expected_return_at)
+                if data.expected_return_at is not None
+                else None
+            ),
             created_by=user.id,
         )
         key.status = "withdrawn"
@@ -191,7 +243,8 @@ def withdraw_key(
         description=key.description,
         status=key.status,
         responsible=person.name,
-        since=movement.created_at,
+        image_count=_count_key_images(db, key.id),
+        **_due_fields(movement, True),
     )
 
 
@@ -245,4 +298,5 @@ def return_key(
         code=key.code,
         description=key.description,
         status=key.status,
+        image_count=_count_key_images(db, key.id),
     )

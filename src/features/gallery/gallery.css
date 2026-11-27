@@ -210,6 +210,90 @@
   transform: translateY(-1px);
 }
 
+.gallery-add-button:disabled,
+.gallery-card-actions button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.gallery-notice {
+  margin: 0 0 20px;
+  padding: 12px 16px;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  background: #eff6ff;
+  color: #1e40af;
+  font-size: 13px;
+}
+
+.gallery-error {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid #fecaca;
+  border-radius: 7px;
+  background: #fef2f2;
+  color: #b91c1c;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.gallery-error-box {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 18px;
+  padding: 12px 16px;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  background: #fef2f2;
+  color: #b91c1c;
+  font-size: 13px;
+}
+
+.gallery-error-box p {
+  margin: 0;
+}
+
+.gallery-error-box button {
+  padding: 8px 12px;
+  border: 1px solid #fca5a5;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #b91c1c;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.gallery-image-fallback,
+.gallery-modal-fallback {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.gallery-modal-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+  margin-bottom: 18px;
+  border-radius: 8px;
+  background: #f1f5f9;
+}
+
+.gallery-modal-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  color: #2563eb;
+  font-size: 12px;
+  font-weight: 600;
+}
+
 /* ========================================
    FILTROS E PESQUISA
 ======================================== */

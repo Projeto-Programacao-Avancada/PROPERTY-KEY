@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 import re
 import unicodedata
 
@@ -98,13 +99,17 @@ class KeyOut(BaseModel):
     description: str
     status: str
     responsible: str | None = None
+    responsible_id: int | None = None
     since: datetime | None = None
+    expected_return_at: datetime | None = None
+    image_count: int = 0
 
 
 class KeyWithdrawalIn(BaseModel):
     responsible_name: str = Field(min_length=1, max_length=120)
     document: str = Field(min_length=1, max_length=30)
     notes: str | None = Field(default=None, max_length=5000)
+    expected_return_at: datetime | None = None
 
     @field_validator("responsible_name")
     @classmethod
@@ -165,6 +170,43 @@ class MovementKeyOut(BaseModel):
     description: str
 
 
+LoanStatus = Literal[
+    "in_possession", "returned_on_time", "returned_late", "returned", "unreturned"
+]
+
+
+class LoanOut(BaseModel):
+    """Uma retirada pareada com a devolução correspondente (se houver)."""
+
+    id: int  # id da movimentação de retirada
+    key_id: int
+    key: MovementKeyOut
+    person_id: int | None
+    person: MovementRelatedOut | None
+    retirado_em: datetime
+    previsto_em: datetime | None
+    devolvido_em: datetime | None
+    status: LoanStatus
+    status_label: str
+    duracao_real_minutos: int | None
+    duracao_real_texto: str | None
+    em_posse_minutos: int | None
+    atraso_minutos: int | None
+
+
+class LoanMetricsOut(BaseModel):
+    total_retiradas: int
+    em_posse: int
+    devolucoes_concluidas: int
+    duracao_media_minutos: float | None
+    duracao_media_texto: str | None
+    devolucoes_com_prazo: int
+    devolucoes_com_atraso: int
+    taxa_atraso: float | None  # 0..1, entre as devoluções com prazo definido
+    atraso_medio_minutos: float | None
+    atraso_medio_texto: str | None
+
+
 class HistoryMovementOut(BaseModel):
     id: int
     key_id: int
@@ -176,6 +218,12 @@ class HistoryMovementOut(BaseModel):
     key: MovementKeyOut
     person: MovementRelatedOut | None
     operator: MovementRelatedOut | None
+    loan: LoanOut | None = None
+
+
+class HistoryOut(BaseModel):
+    movements: list[HistoryMovementOut]
+    summary: LoanMetricsOut
 
 
 class PersonCreate(BaseModel):
@@ -201,3 +249,80 @@ class PersonOut(BaseModel):
     name: str
     phone: str | None
     email: str | None
+    metrics: LoanMetricsOut | None = None
+
+
+class PersonDetailOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    phone: str | None
+    email: str | None
+    document: str | None
+
+
+class PersonHistoryOut(BaseModel):
+    person: PersonDetailOut
+    summary: LoanMetricsOut
+    loans: list[LoanOut]
+
+
+GalleryCategory = Literal["Fachada", "Imóvel", "Chave", "Documento", "Outros"]
+
+
+class GalleryImageCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+    description: str | None = Field(default=None, max_length=2000)
+    category: GalleryCategory
+    key_id: int | None = Field(default=None, ge=1)
+    image_data: str = Field(min_length=1)
+
+    @field_validator("name")
+    @classmethod
+    def _name(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("Informe o nome da imagem.")
+        return value
+
+    @field_validator("description")
+    @classmethod
+    def _description(cls, value: str | None) -> str | None:
+        return value.strip() or None if value is not None else None
+
+
+class GalleryImageOut(BaseModel):
+    id: int
+    name: str
+    description: str | None = None
+    category: str
+    key_id: int | None = None
+    key_code: str | None = None
+    key_description: str | None = None
+    mime_type: str
+    size_bytes: int
+    url: str
+    created_at: datetime
+
+
+class AiPredictionIn(BaseModel):
+    key_id: int = Field(ge=1)
+    person_id: int = Field(default=1, ge=1)
+    withdrawal_at: datetime | None = None
+
+
+class AiStatusOut(BaseModel):
+    available: bool
+    model: str
+    threshold_minutes: int
+
+
+class AiPredictionOut(BaseModel):
+    risk: Literal["high", "low"]
+    probability: float
+    probability_percent: float
+    threshold_minutes: int
+    threshold_hours: int
+    model: str
+    disclaimer: str

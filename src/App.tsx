@@ -4,6 +4,17 @@ import HistoryPage from './features/history/HistoryPage'
 import KeysPage from './features/keys/KeysPage'
 import GalleryPage from './features/gallery/GalleryPage'
 import AiPage from './features/ai/AiPage'
+import PersonHistoryDrawer from './features/history/PersonHistoryDrawer'
+import { examplePersonHistory } from './features/history/exampleMovements'
+import { formatDuration, minutesBetween, type PersonRef } from './features/history/types'
+import {
+  getCurrentPage,
+  isKnownPath,
+  navigateTo,
+  subscribeToRoute,
+  type AppPage,
+} from './lib/router'
+import { useNow } from './lib/useNow'
 import {
   ApiError,
   clearToken,
@@ -240,7 +251,14 @@ function MostMovedKeys() {
   )
 }
 
-function WithdrawnKeys({ keys }: { keys: KeyRecord[] }) {
+function WithdrawnKeys({
+  keys,
+  onOpenPerson,
+}: {
+  keys: KeyRecord[]
+  onOpenPerson: (person: PersonRef) => void
+}) {
+  const now = useNow()
   const withdrawn = keys.filter(
     (key) => key.status === 'withdrawn'
   )
@@ -261,11 +279,87 @@ function WithdrawnKeys({ keys }: { keys: KeyRecord[] }) {
             Nenhuma chave retirada no momento.
           </p>
         ) : (
-          withdrawn.map((key) => (
-            <div className="activity-item" key={key.id}>
+          withdrawn.map((key) => {
+            const person = key.responsible && key.responsible_id != null
+              ? { id: key.responsible_id, name: key.responsible }
+              : null
+
+            return (
+              <div className="activity-item" key={key.id}>
+                <div className="activity-info">
+                  <strong>{key.code}</strong>
+                  <span>{key.description}</span>
+                </div>
+                {key.responsible && (
+                  <div className="activity-meta">
+                    {person ? (
+                      <button
+                        type="button"
+                        className="person-link"
+                        title="Ver histórico de retiradas"
+                        onClick={() => onOpenPerson(person)}
+                      >
+                        {person.name}
+                      </button>
+                    ) : (
+                      <span>{key.responsible}</span>
+                    )}
+                    {key.since && (
+                      <span>em posse há {formatDuration(minutesBetween(key.since, now))}</span>
+                    )}
+                  </div>
+                )}
+              </div>
+            )
+          })
+        )}
+      </div>
+    </article>
+  )
+}
+
+function PeopleCard({
+  people,
+  onOpenPerson,
+}: {
+  people: ApiPerson[]
+  onOpenPerson: (person: PersonRef) => void
+}) {
+  return (
+    <article className="list-card people-card">
+      <div className="list-heading">
+        <div>
+          <h3>PESSOAS E RETIRADAS</h3>
+          <p>Abra o histórico de retiradas de cada pessoa</p>
+        </div>
+        <span className="list-number">{people.length}</span>
+      </div>
+
+      <div className="activity-list">
+        {people.length === 0 ? (
+          <p className="empty-state">
+            As pessoas aparecerão aqui quando retirarem uma chave.
+          </p>
+        ) : (
+          people.map((person) => (
+            <div className="activity-item" key={person.id}>
               <div className="activity-info">
-                <strong>{key.code}</strong>
-                <span>{key.description}</span>
+                <button
+                  type="button"
+                  className="person-link"
+                  onClick={() => onOpenPerson({ id: person.id, name: person.name })}
+                >
+                  {person.name}
+                </button>
+              </div>
+              <div className="activity-meta">
+                <span>
+                  {person.metrics?.total_retiradas ?? 0}{' '}
+                  {person.metrics?.total_retiradas === 1 ? 'retirada' : 'retiradas'}
+                </span>
+                <span>
+                  duração média {person.metrics?.duracao_media_texto ?? '—'}
+                </span>
               </div>
             </div>
           ))
@@ -579,18 +673,22 @@ function LoginScreen({
 
 function App() {
   const [user, setUser] = useState<ApiUser | null>(null)
-  const [authLoading, setAuthLoading] = useState(true)
+  const [authLoading, setAuthLoading] = useState(() => Boolean(getToken()))
   const [keys, setKeys] = useState<KeyRecord[]>([])
   const [people, setPeople] = useState<ApiPerson[]>([])
   const [previewMode, setPreviewMode] = useState(false)
   const [dataError, setDataError] = useState('')
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const [historyPerson, setHistoryPerson] = useState<PersonRef | null>(null)
 
-  const [activePage, setActivePage] = useState<
-    'dashboard' | 'history' | 'keys' | 'gallery' | 'ai'
-  >('dashboard')
+  const [activePage, setActivePage] = useState<AppPage>(() => getCurrentPage())
 
   const isLoggedIn = user !== null
+
+  function handleNavigate(page: AppPage) {
+    navigateTo(page)
+    setActivePage(page)
+  }
 
   function resetSession() {
     clearToken()
@@ -600,16 +698,24 @@ function App() {
     setPreviewMode(false)
     setDataError('')
     setIsModalOpen(false)
+    setHistoryPerson(null)
+    navigateTo('dashboard', { replace: true })
     setActivePage('dashboard')
   }
+
+  // Sincroniza a navegação com a URL do navegador (mantém a tela ao recarregar)
+  useEffect(() => {
+    if (!isKnownPath(window.location.pathname)) {
+      navigateTo('dashboard', { replace: true })
+    }
+    return subscribeToRoute(setActivePage)
+  }, [])
 
   // Restaura a sessão a partir do token salvo e trata expiração
   useEffect(() => {
     setUnauthorizedHandler(resetSession)
 
-    if (!getToken()) {
-      setAuthLoading(false)
-    } else {
+    if (getToken()) {
       fetchMe()
         .then(setUser)
         .catch((error) => {
@@ -661,16 +767,22 @@ function App() {
     setUser({ id: 0, name: 'Prévia', email: null, phone: null })
     setKeys([
       { id: 1, code: 'A01', description: 'Apartamento 101 — Bloco A', status: 'available' },
-      { id: 2, code: 'A02', description: 'Apartamento 202 — Bloco A', status: 'withdrawn', responsible: 'Mariana Costa', since: '2026-11-04T09:30:00-03:00' },
+      { id: 2, code: 'A02', description: 'Apartamento 202 — Bloco A', status: 'withdrawn', responsible: 'Mariana Costa', responsible_id: 1, since: '2026-11-04T09:30:00-03:00' },
       { id: 3, code: 'B01', description: 'Apartamento 103 — Bloco B', status: 'available' },
-      { id: 4, code: 'G01', description: 'Garagem — Acesso principal', status: 'withdrawn', responsible: 'Lucas Almeida', since: '2026-11-04T11:15:00-03:00' },
+      { id: 4, code: 'G01', description: 'Garagem — Acesso principal', status: 'withdrawn', responsible: 'Lucas Almeida', responsible_id: 2, since: '2026-11-04T11:15:00-03:00' },
       { id: 5, code: 'S01', description: 'Salão de festas', status: 'available' },
     ])
     setPeople([
-      { id: 1, name: 'Mariana Costa', phone: null, email: null },
-      { id: 2, name: 'Lucas Almeida', phone: null, email: null },
-      { id: 3, name: 'Beatriz Santos', phone: null, email: null },
-    ])
+      { id: 1, name: 'Mariana Costa' },
+      { id: 2, name: 'Lucas Almeida' },
+      { id: 3, name: 'Beatriz Santos' },
+      { id: 4, name: 'Pedro Oliveira' },
+    ].map((person) => ({
+      ...person,
+      phone: null,
+      email: null,
+      metrics: examplePersonHistory(person.id).summary,
+    })))
     setDataError('')
   }
 
@@ -766,12 +878,13 @@ function App() {
     keyId: number,
     responsibleName: string,
     document: string,
-    notes: string
+    notes: string,
+    expectedReturnAt: string | null
   ): Promise<string | null> {
     if (!user) return 'Sua sessão expirou. Entre novamente.'
 
     try {
-      const updated = await withdrawKey(keyId, responsibleName, document, notes)
+      const updated = await withdrawKey(keyId, responsibleName, document, notes, expectedReturnAt)
       setKeys((currentKeys) =>
         currentKeys.map((key) => key.id === updated.id ? updated : key)
       )
@@ -807,6 +920,17 @@ function App() {
       return errorMessage(error)
     }
   }
+
+  function refreshKeys() {
+    if (!user || previewMode) return
+    fetchKeys().then(setKeys).catch((error) => {
+      console.error('Erro ao atualizar chaves:', error)
+    })
+  }
+
+  // Na prévia (global ou local do Histórico) o painel usa dados de exemplo, nunca a API.
+  const openPerson = (person: PersonRef) =>
+    setHistoryPerson({ ...person, example: Boolean(person.example) || previewMode })
 
   const total = keys.length
   const disponiveis = keys.filter(
@@ -906,7 +1030,7 @@ function App() {
           <button
             className={activePage === 'dashboard' ? 'active' : ''}
             type="button"
-            onClick={() => setActivePage('dashboard')}
+            onClick={() => handleNavigate('dashboard')}
             aria-current={activePage === 'dashboard' ? 'page' : undefined}
           >
             DASHBOARD
@@ -915,7 +1039,7 @@ function App() {
           <button
             className={activePage === 'history' ? 'active' : ''}
             type="button"
-            onClick={() => setActivePage('history')}
+            onClick={() => handleNavigate('history')}
             aria-current={activePage === 'history' ? 'page' : undefined}
           >
             HISTÓRICO
@@ -924,7 +1048,7 @@ function App() {
           <button
             className={activePage === 'keys' ? 'active' : ''}
             type="button"
-            onClick={() => setActivePage('keys')}
+            onClick={() => handleNavigate('keys')}
             aria-current={activePage === 'keys' ? 'page' : undefined}
           >
             CHAVES
@@ -933,7 +1057,7 @@ function App() {
           <button
             className={activePage === 'gallery' ? 'active' : ''}
             type="button"
-            onClick={() => setActivePage('gallery')}
+            onClick={() => handleNavigate('gallery')}
             aria-current={activePage === 'gallery' ? 'page' : undefined}
           >
             GALERIA
@@ -942,7 +1066,7 @@ function App() {
           <button
             className={activePage === 'ai' ? 'active' : ''}
             type="button"
-            onClick={() => setActivePage('ai')}
+            onClick={() => handleNavigate('ai')}
             aria-current={activePage === 'ai' ? 'page' : undefined}
           >
             IA / PREVISÕES
@@ -952,7 +1076,7 @@ function App() {
         {activePage === 'ai' ? (
           <AiPage keys={keys} previewMode={previewMode} />
         ) : activePage === 'history' ? (
-          <HistoryPage previewMode={previewMode} />
+          <HistoryPage previewMode={previewMode} onOpenPerson={openPerson} />
         ) : activePage === 'keys' ? (
           <KeysPage
             keys={keys}
@@ -960,10 +1084,15 @@ function App() {
             onReturn={handleReturnKey}
             onUpdate={handleUpdateKey}
             onDelete={handleDeleteKey}
+            onOpenPerson={openPerson}
             readOnly={previewMode}
           />
         ) : activePage === 'gallery' ? (
-          <GalleryPage keys={keys} />
+          <GalleryPage
+            keys={keys}
+            previewMode={previewMode}
+            onGalleryChange={refreshKeys}
+          />
         ) : (
           <main className="dashboard">
             {dataError && (
@@ -995,12 +1124,21 @@ function App() {
             </section>
 
             <section className="bottom-grid">
-              <WithdrawnKeys keys={keys} />
+              <WithdrawnKeys keys={keys} onOpenPerson={openPerson} />
               <RecentActivity />
+              <PeopleCard people={people} onOpenPerson={openPerson} />
             </section>
           </main>
         )}
       </div>
+
+      {historyPerson && (
+        <PersonHistoryDrawer
+          key={`${historyPerson.example ? 'example' : 'person'}-${historyPerson.id}`}
+          person={historyPerson}
+          onClose={() => setHistoryPerson(null)}
+        />
+      )}
 
       {isModalOpen && (
         <NewKeyModal

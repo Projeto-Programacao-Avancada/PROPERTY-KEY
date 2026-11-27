@@ -1,14 +1,27 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from sqlalchemy.exc import OperationalError, ProgrammingError
+from sqlalchemy.exc import OperationalError, ProgrammingError, SQLAlchemyError
 
 from .config import settings
-from . import historico
-from .routers import auth, keys, people, ai
+from .database import engine
+from .models import GalleryImage
+from .routers import api_router
 
-app = FastAPI(title="Controle de Chaves API")
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    try:
+        GalleryImage.__table__.create(bind=engine, checkfirst=True)
+    except SQLAlchemyError:
+        pass
+    yield
+
+
+app = FastAPI(title="Controle de Chaves API", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -17,14 +30,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(auth.router, prefix="/api")
-app.include_router(keys.router, prefix="/api")
-app.include_router(historico.router, prefix="/api")
-app.include_router(people.router, prefix="/api")
-app.include_router(ai.router, prefix="/api")
+app.include_router(api_router)
 
 
-@app.get("/api/health")
+@app.get("/api/health", tags=["health"])
 def health():
     return {"status": "ok"}
 

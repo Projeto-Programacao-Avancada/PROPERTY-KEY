@@ -60,12 +60,13 @@
   line-height: 1.5;
 }
 .history-preview-label { font: 10px 'DM Mono', monospace; font-weight: 500; letter-spacing: 0.7px; }
-.history-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 20px; }
+.history-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 20px; }
 .history-stat { display: flex; flex-direction: column; padding: 18px 20px; background: #fff; border: 1px solid #dedede; }
 .history-stat-title { font-size: 10px; letter-spacing: 1px; color: #777; }
 .history-stat-value { margin: 10px 0 5px; font: 500 32px/1.2 'DM Mono', monospace; }
 .history-red { color: #eb2d00; }
 .history-green { color: #009f76; }
+.history-stat-value.history-stat-text { font-size: 24px; overflow-wrap: anywhere; }
 .history-stat-description { font-size: 10px; color: #888; }
 .history-panel { border: 1px solid #dedede; background: #fff; margin-top: 16px; }
 .history-page h3 { margin: 0; color: #333; font-size: 10px; font-weight: 600; letter-spacing: 0.8px; }
@@ -73,7 +74,7 @@
 .history-page .history-clear { border: 0; padding: 3px 0; background: transparent; color: #eb2d00; font-size: 11px; }
 .history-clear span { margin-left: 7px; font-size: 16px; }
 .history-page .history-clear:disabled { color: #888; }
-.history-filters { display: grid; grid-template-columns: minmax(220px, 1.6fr) minmax(180px, 1.1fr) repeat(2, minmax(135px, 0.8fr)); gap: 14px; padding: 17px 20px 20px; }
+.history-filters { display: grid; grid-template-columns: minmax(200px, 1.5fr) repeat(2, minmax(160px, 1fr)) repeat(2, minmax(130px, 0.8fr)); gap: 14px; padding: 17px 20px 20px; }
 .history-filters label { display: flex; flex-direction: column; gap: 8px; min-width: 0; font-size: 9px; font-weight: 600; letter-spacing: 0.7px; color: #777; }
 .history-filters :is(input, select) { width: 100%; height: 39px; min-width: 0; padding: 0 11px; border: 1px solid #dedede; border-radius: 0; background: #fff; color: #444; font-size: 11px; color-scheme: light; }
 .history-filters input::placeholder { color: #999; }
@@ -87,7 +88,7 @@
 .history-order { display: flex; align-items: center; gap: 9px; color: #888; font-size: 10px; }
 .history-order select { padding: 7px 8px; border: 1px solid #dedede; border-radius: 0; background: #fff; color: #555; font-size: 10px; }
 .history-table-scroll { overflow-x: auto; }
-.history-table { border-collapse: collapse; width: 100%; min-width: 850px; text-align: left; }
+.history-table { border-collapse: collapse; width: 100%; min-width: 1040px; text-align: left; }
 .history-table th { padding: 12px 20px; border-top: 1px solid #e7e7e5; border-bottom: 1px solid #e7e7e5; background: #fafaf9; color: #888; font-size: 9px; font-weight: 500; letter-spacing: 0.7px; white-space: nowrap; }
 .history-table td { padding: 15px 20px; border-bottom: 1px solid #eeeeec; color: #444; font-size: 11px; line-height: 1.6; vertical-align: middle; }
 .history-table tbody tr:last-child td { border-bottom: 0; }
@@ -101,6 +102,13 @@
 .history-badge > span { font-size: 15px; line-height: 1; }
 .history-badge-withdrawal { background: #fff0ea; color: #c83a18; }
 .history-badge-return { background: #eaf7f1; color: #008663; }
+/* Duração real e situação da posse */
+.loan-duration { display: block; color: #333; font: 500 11px/1.6 'DM Mono', monospace; white-space: nowrap; }
+.loan-duration-live { color: #a8730b; }
+.loan-badge { display: inline-block; margin-top: 4px; padding: 3px 8px; background: #f0f0ee; color: #555; font: 9px 'DM Mono', monospace; letter-spacing: 0.3px; }
+.loan-badge-in_possession { background: #fff6e0; color: #8a5f08; }
+.loan-badge-returned_on_time { background: #eaf7f1; color: #008663; }
+.loan-badge-returned_late { background: #fff0ea; color: #c83a18; }
 .history-table .history-notes { max-width: 250px; color: #777; overflow-wrap: anywhere; }
 .history-table-footer { padding: 14px 20px; border-top: 1px solid #e7e7e5; color: #888; font-size: 10px; }
 .history-table-footer strong { color: #555; font-weight: 500; }
@@ -125,6 +133,7 @@
   .history-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .history-stat { padding: 16px; }
   .history-stat-value { font-size: 28px; }
+  .history-stat-value.history-stat-text { font-size: 16px; }
   .history-records-heading { align-items: flex-start; flex-direction: column; gap: 12px; }
   .history-table-footer { align-items: flex-start; flex-direction: column; gap: 15px; }
   .history-pagination { width: 100%; justify-content: space-between; }
@@ -134,4 +143,48 @@
 @media (max-width: 400px) {
   .history-filters { grid-template-columns: minmax(0, 1fr); }
   .history-filter-heading { gap: 10px; }
+}
+
+/* Painel de histórico de retiradas da pessoa (aberto a partir de qualquer tela) */
+.person-overlay { position: fixed; z-index: 1000; inset: 0; display: flex; justify-content: flex-end; background: rgb(0 0 0 / 55%); }
+.person-drawer { display: flex; flex-direction: column; width: min(100%, 520px); height: 100%; background: #fff; border-left: 1px solid #dedede; box-shadow: -16px 0 48px rgb(0 0 0 / 20%); }
+.person-drawer :is(button, [tabindex]):focus-visible { outline: 2px solid #eb2d00; outline-offset: 3px; }
+.person-drawer-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; padding: 20px 24px 18px; border-bottom: 1px solid #dedede; }
+.person-eyebrow { color: #eb2d00; font: 10px 'DM Mono', monospace; letter-spacing: 1.2px; }
+.person-drawer-header h2 { margin: 8px 0 4px; color: #161616; font-size: 18px; font-weight: 600; letter-spacing: -0.4px; overflow-wrap: anywhere; }
+.person-drawer-header p { margin: 0; color: #777; font: 11px 'DM Mono', monospace; }
+.person-close { flex: none; width: 40px; height: 40px; margin: -8px -10px 0 0; border: 0; background: transparent; color: #888; font-size: 24px; line-height: 1; }
+.person-close:hover { color: #eb2d00; }
+.person-drawer-body { flex: 1; min-height: 0; padding: 20px 24px calc(28px + env(safe-area-inset-bottom, 0px)); overflow-y: auto; }
+.person-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.person-stat { display: flex; flex-direction: column; min-width: 0; padding: 14px 16px; border: 1px solid #dedede; background: #fff; }
+.person-stat-title { color: #777; font-size: 9px; font-weight: 600; letter-spacing: 0.8px; }
+.person-stat-value { margin: 8px 0 4px; color: #161616; font: 500 22px/1.2 'DM Mono', monospace; overflow-wrap: anywhere; }
+.person-stat-description { color: #888; font-size: 10px; line-height: 1.4; }
+.person-loans { margin: 16px 0 0; padding: 0; border: 1px solid #dedede; list-style: none; }
+.person-loan { padding: 16px; border-bottom: 1px solid #eeeeec; }
+.person-loan:last-child { border-bottom: 0; }
+.person-loan-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.person-loan-head > div:first-child { min-width: 0; }
+.person-loan-status { flex: none; max-width: 52%; text-align: right; }
+.person-loan-status .loan-badge { margin-top: 0; }
+.person-loan-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 16px; margin: 14px 0 0; }
+.person-loan-grid dt { color: #888; font-size: 9px; font-weight: 500; letter-spacing: 0.7px; }
+.person-loan-grid dd { margin: 4px 0 0; color: #333; font: 11px/1.5 'DM Mono', monospace; }
+.person-message { margin: 0; padding: 40px 8px; color: #888; font-size: 12px; line-height: 1.7; text-align: center; }
+.person-message p { margin: 0 0 14px; }
+.person-retry { min-height: 36px; padding: 9px 12px; border: 1px solid #d8d8d5; border-radius: 0; background: #fff; color: #444; font-family: inherit; font-size: 10px; font-weight: 500; letter-spacing: 0.4px; }
+.person-retry:hover { border-color: #eb2d00; color: #eb2d00; }
+
+@media (max-width: 650px) {
+  .person-drawer { width: 100%; border-left: 0; }
+  .person-drawer-header { padding: 16px 16px 14px; padding-top: calc(16px + env(safe-area-inset-top, 0px)); }
+  .person-drawer-body { padding: 16px 16px calc(24px + env(safe-area-inset-bottom, 0px)); }
+  .person-stat { padding: 12px 14px; }
+  .person-stat-value { font-size: 18px; }
+  .person-loan { padding: 14px; }
+}
+@media (max-width: 400px) {
+  .person-loan-head { flex-direction: column; }
+  .person-loan-status { max-width: none; text-align: left; }
 }

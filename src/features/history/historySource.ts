@@ -1,6 +1,11 @@
-import type { HistoryMovement } from './types'
-import { fetchHistory } from '../../lib/api'
+import { fetchHistory, fetchPersonHistory } from '../../lib/api'
+import { examplePersonHistory } from './exampleMovements'
+import type { HistoryMovement, PersonHistory, PersonRef } from './types'
 
-export function loadHistory(): Promise<HistoryMovement[] | null> {
-  return fetchHistory()
+export async function loadHistory(): Promise<HistoryMovement[]> {
+  return (await fetchHistory()).movements
+}
+
+export function loadPersonHistory(person: PersonRef): Promise<PersonHistory> {
+  return person.example ? Promise.resolve(examplePersonHistory(person.id)) : fetchPersonHistory(person.id)
 }

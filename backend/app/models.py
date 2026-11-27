@@ -11,12 +11,17 @@ from sqlalchemy import (
     Text,
     func,
 )
+from sqlalchemy.dialects.mysql import BIGINT as MYSQL_BIGINT
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .database import Base
 
-# BIGINT no MySQL; INTEGER no SQLite (necessário para autoincrement em testes)
-BigId = BigInteger().with_variant(Integer, "sqlite")
+# BIGINT UNSIGNED no MySQL (compatível com FKs do schema.sql); INTEGER no SQLite (testes)
+BigId = (
+    BigInteger()
+    .with_variant(MYSQL_BIGINT(unsigned=True), "mysql")
+    .with_variant(Integer, "sqlite")
+)
 
 
 class User(Base):
@@ -71,6 +76,27 @@ class KeyMovement(Base):
     )
     type: Mapped[str] = mapped_column(String(20))
     notes: Mapped[str | None] = mapped_column(Text)
+    # Previsão de devolução informada na retirada; NULL em devoluções e registros antigos.
+    due_at: Mapped[datetime | None] = mapped_column(DateTime)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    created_by: Mapped[int | None] = mapped_column(
+        BigId, ForeignKey("users.id", ondelete="SET NULL")
+    )
+
+
+class GalleryImage(Base):
+    __tablename__ = "gallery_images"
+
+    id: Mapped[int] = mapped_column(BigId, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(255))
+    description: Mapped[str | None] = mapped_column(Text)
+    category: Mapped[str] = mapped_column(String(40))
+    key_id: Mapped[int | None] = mapped_column(
+        BigId, ForeignKey("keys.id", ondelete="SET NULL")
+    )
+    file_name: Mapped[str] = mapped_column(String(255), unique=True)
+    mime_type: Mapped[str] = mapped_column(String(50))
+    size_bytes: Mapped[int] = mapped_column(Integer)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     created_by: Mapped[int | None] = mapped_column(
         BigId, ForeignKey("users.id", ondelete="SET NULL")

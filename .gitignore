@@ -71,3 +71,6 @@ logs/
 backend/ai_model/data/*.csv
 backend/ai_model/artifacts/*.joblib
 backend/ai_model/artifacts/metrics.json
+
+# Arquivos enviados para a galeria local
+backend/uploads/
